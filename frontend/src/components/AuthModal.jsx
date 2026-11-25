@@ -1,8 +1,11 @@
 ﻿import { useCallback, useEffect, useRef, useState } from 'react';
 import RoleSelector from './RoleSelector';
 
-const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+const apiBase = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/+$/, '');
 const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+const googleConfigured = Boolean(apiBase && clientId);
+let initializedIdentity;
+let activeCredentialHandler;
 
 export default function AuthPanel({ mode, onModeChange, onAuthSuccess }) {
   const [role, setRole] = useState('customer');
@@ -40,7 +43,18 @@ export default function AuthPanel({ mode, onModeChange, onAuthSuccess }) {
   }, [isSignUp, mode, onAuthSuccess]);
 
   useEffect(() => {
-    if (!clientId) return;
+    function handleCredential({ credential }) {
+      if (credential) authenticate({ credential, role: isSignUp ? role : undefined });
+    }
+
+    activeCredentialHandler = handleCredential;
+    return () => {
+      if (activeCredentialHandler === handleCredential) activeCredentialHandler = undefined;
+    };
+  }, [authenticate, isSignUp, role]);
+
+  useEffect(() => {
+    if (!googleConfigured) return;
     const target = googleTarget.current;
     const script = document.getElementById('google-identity');
     const showUnavailable = () => setGoogleUnavailable(true);
@@ -53,13 +67,13 @@ export default function AuthPanel({ mode, onModeChange, onAuthSuccess }) {
       }
 
       try {
-        identity.initialize({
-          client_id: clientId,
-          callback: ({ credential }) => authenticate({
-            credential,
-            role: isSignUp ? role : undefined,
-          }),
-        });
+        if (initializedIdentity !== identity) {
+          identity.initialize({
+            client_id: clientId,
+            callback: (response) => activeCredentialHandler?.(response),
+          });
+          initializedIdentity = identity;
+        }
         target.replaceChildren();
         identity.renderButton(target, {
           theme: 'outline',
@@ -91,7 +105,7 @@ export default function AuthPanel({ mode, onModeChange, onAuthSuccess }) {
       window.clearTimeout(timeout);
       target.replaceChildren();
     };
-  }, [authenticate, isSignUp, role]);
+  }, [isSignUp]);
 
   function changeMode(nextMode) {
     setError(null);
@@ -111,10 +125,10 @@ export default function AuthPanel({ mode, onModeChange, onAuthSuccess }) {
       {error?.mode === mode && <p className="auth-error" role="alert">{error.message}</p>}
       {isSignUp && <RoleSelector selectedRole={role} onSelectRole={(nextRole) => { if (!pending) setRole(nextRole); }} />}
       <div className="google-action" aria-busy={pending} inert={pending}>
-        {clientId && <div ref={googleTarget} />}
-        {(!clientId || googleUnavailable) && (
+        {googleConfigured && <div ref={googleTarget} />}
+        {(!googleConfigured || googleUnavailable) && (
           <p className="account-note">
-            {clientId ? 'Google sign-in could not load. Refresh the page to try again.' : 'Google sign-in is currently unavailable.'}
+            {googleConfigured ? 'Google sign-in could not load. Refresh the page to try again.' : 'Google sign-in is currently unavailable.'}
           </p>
         )}
       </div>
