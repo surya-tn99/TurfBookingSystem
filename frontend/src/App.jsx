@@ -2,6 +2,7 @@
 import AppLink from './components/AppLink';
 import AuthPanel from './components/AuthModal';
 import Home from './components/Home';
+import NameTooltip from './components/NameTooltip';
 import { OwnerDashboard, TurfRegistration } from './components/OwnerTurfs';
 import ProfileSetup from './components/ProfileSetup';
 import Skeleton from './components/Skeleton';
@@ -153,7 +154,6 @@ export default function App() {
           {!mode && <nav className="header-actions" aria-label="Account">
             {user ? (
               <>
-                {isDashboard && user.role === 'owner' && <AppLink className="button button-primary" href={managerPath + '/turfs/new'} navigate={navigate}>Add turf</AppLink>}
                 <UserMenu name={user.name} onLogout={signOut} isOwner={user.role === 'owner' && !isDashboard} navigate={navigate} />
               </>
             ) : sessionStatus === 'checking' ? (
@@ -205,7 +205,7 @@ export default function App() {
           {user ? (
             <div className="account-summary">
               <span className="account-role">{roleNames[user.role] ?? 'Member'}</span>
-              <h2>Welcome, {user.name}.</h2>
+              <h2><NameTooltip text={`Welcome, ${user.name}.`} fullName={user.name} /></h2>
               <p>You're signed in as {user.email}.</p>
             </div>
           ) : sessionStatus === 'checking' ? (

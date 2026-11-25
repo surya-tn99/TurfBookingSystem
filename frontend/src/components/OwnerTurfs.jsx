@@ -2,7 +2,9 @@
 import { indiaCities } from '../indiaCities';
 import { managerPath, ownerRequest, turfPath, turfRating } from '../ownerApi';
 import AppLink from './AppLink';
+import { Dropdown, SuggestionInput } from './Dropdown';
 import LoadingImage from './LoadingImage';
+import NameTooltip from './NameTooltip';
 import Skeleton from './Skeleton';
 
 export function TurfStatus({ turf }) {
@@ -24,8 +26,11 @@ export function OwnerDashboard({ user, navigate }) {
 
   return (
     <main className="frame owner-page">
-      <div className="owner-heading"><h1>Welcome, {user.name}.</h1></div>
-      <h2>My turfs</h2>
+      <div className="owner-heading"><h1><NameTooltip text={`Welcome, ${user.name}.`} fullName={user.name} /></h1></div>
+      <div className="owner-heading">
+        <h2>My turfs</h2>
+        <AppLink className="button button-primary" href={managerPath + '/turfs/new'} navigate={navigate}>Add turf</AppLink>
+      </div>
       {!data && !error && <Skeleton label="Loading turfs…" variant="cards" />}
       {error && <p className="auth-error" role="alert">{error}</p>}
       {data?.turfs.length === 0 && <p className="account-note">Add your first turf to start setting it up.</p>}
@@ -35,7 +40,7 @@ export function OwnerDashboard({ user, navigate }) {
             {turf.media.images[0] ? <LoadingImage className="owner-turf-photo" src={turf.media.images[0]} loading="lazy" />
               : <div className="owner-turf-photo turf-image-empty" aria-hidden="true" />}
             <TurfStatus turf={turf} />
-            <h3>{turf.name}</h3>
+            <h3><NameTooltip text={turf.name} insideLink /></h3>
             <p className="account-note">{turfRating(turf)}</p>
           </AppLink>
         ))}
@@ -83,11 +88,10 @@ export function TurfRegistration({ user, navigate }) {
         </div>
         <h2>Location</h2>
         <div className="registration-location">
-          <label>State or union territory<select name="state" required value={state} onChange={(event) => setState(event.target.value)}>
-            <option value="">Select state</option>{Object.keys(indiaCities).map((name) => <option key={name}>{name}</option>)}
-          </select></label>
-          <label>City<input key={state} name="city" list="turf-cities" required disabled={!state} placeholder="Select or enter a city" /></label>
-          <datalist id="turf-cities">{indiaCities[state]?.map((city) => <option key={city} value={city} />)}</datalist>
+          <Dropdown label="State or union territory" name="state" required value={state} onChange={setState}
+            placeholder="Select state" options={Object.keys(indiaCities)} />
+          <SuggestionInput key={state} label="City" name="city" suggestions={indiaCities[state] ?? []}
+            required disabled={!state} placeholder="Select or enter a city" />
           <label className="registration-full">Address line 1<input name="street" required /></label>
           <label className="registration-full">Address line 2 (optional)<input name="area" /></label>
           <label>Pincode<input name="pincode" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required /></label>

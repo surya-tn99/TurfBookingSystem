@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { managerPath, ownerRequest, turfRating } from '../ownerApi';
 import AppLink from './AppLink';
+import { Dropdown } from './Dropdown';
+import NameTooltip from './NameTooltip';
 import Skeleton from './Skeleton';
 import TurfPhotoSlideshow from './TurfPhotoSlideshow';
 import TurfSetup from './TurfSetup';
@@ -57,7 +59,7 @@ function Staff({ id }) {
     {staff === null && !error && <Skeleton label="Loading turf staff…" />}
     {staff?.length === 0 && <p>No staff members yet.</p>}
     {staff?.map((member) => <div className="owner-heading owner-edit-row" key={member._id}>
-      <div><strong>{member.name}</strong><p>{member.email} · {member.phone}</p><p>{member.isActive ? 'Active' : 'Inactive'}</p></div>
+      <div className="staff-details"><strong><NameTooltip text={member.name} /></strong><p>{member.email} · {member.phone}</p><p>{member.isActive ? 'Active' : 'Inactive'}</p></div>
       {pendingRemoval === member._id ? (
         <div className="owner-actions">
           <span className="account-note">Remove this member’s access to the turf?</span>
@@ -131,7 +133,7 @@ export default function TurfDetails({ id, ownerEmail, navigate }) {
     {back}
     <TurfPhotoSlideshow photos={turf.media.images} />
     <section className="owner-panel owner-form">
-      <div className="owner-heading"><h1>{turf.name}</h1><button className="button button-outline" type="button" disabled={busy} aria-label="Edit turf name and contact details" onClick={() => { setEditing(!editing); setRemoval(null); }}>✎</button></div>
+      <div className="owner-heading turf-detail-title"><h1><NameTooltip text={turf.name} /></h1><button className="button button-outline" type="button" disabled={busy} aria-label="Edit turf name and contact details" onClick={() => { setEditing(!editing); setRemoval(null); }}>✎</button></div>
       <p>{[address.street, address.area, address.city, address.state, address.pincode].filter(Boolean).join(', ')}</p>
       <p>{turf.contactPhone} · {turf.contactEmail}</p>
       {address.mapPinUrl && <a href={address.mapPinUrl} target="_blank" rel="noreferrer">Open in Google Maps</a>}
@@ -173,6 +175,8 @@ export default function TurfDetails({ id, ownerEmail, navigate }) {
     <nav className="owner-actions turf-detail-nav" aria-label="Turf sections">
       {sections.map(([key, label]) => <button className="button button-outline" key={key} aria-pressed={section === key} onClick={() => setSection(key)}>{label}</button>)}
     </nav>
+    <Dropdown className="turf-section-picker" label="Section" value={section} onChange={setSection}
+      options={sections.map(([value, label]) => ({ value, label }))} />
     {section === 'revenue' && <section className="owner-panel"><h2>Revenue</h2><p>Revenue will appear here once bookings and payments are enabled.</p></section>}
     {section === 'pricing' && <TurfSetup id={id} navigate={navigate} section="pricing" onSaved={setTurf} />}
     {section === 'facilities' && <TurfSetup

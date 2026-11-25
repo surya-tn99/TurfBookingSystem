@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { ownerRequest, turfPath } from '../ownerApi';
 import AppLink from './AppLink';
+import { Dropdown, SuggestionInput } from './Dropdown';
 import { TurfStatus } from './OwnerTurfs';
 import Skeleton from './Skeleton';
 import LoadingImage from './LoadingImage';
+import NameTooltip from './NameTooltip';
 
 const sportSuggestions = {
   outdoor: ['5v5 Football', '7v7 Football', 'Box Cricket', 'Tennis', 'Basketball'],
@@ -24,9 +26,9 @@ function TrashIcon() {
 }
 
 function Field({ label, value, update, type = 'text', options, ...props }) {
-  return <label>{label}{options
-    ? <select value={value ?? options[0]} onChange={(event) => update(event.target.value)}>{options.map((option) => <option key={option}>{option}</option>)}</select>
-    : <input {...props} type={type} value={value ?? ''} onChange={(event) => update(type === 'number' ? event.target.valueAsNumber || 0 : event.target.value)} />}
+  if (options) return <Dropdown label={label} options={options} value={String(value ?? options[0])} onChange={update} />;
+  return <label>{label}
+    <input {...props} type={type} value={value ?? ''} onChange={(event) => update(type === 'number' ? event.target.valueAsNumber || 0 : event.target.value)} />
   </label>;
 }
 
@@ -48,26 +50,20 @@ function BookingPolicyFields({ label, value, onChange, children }) {
   </div>;
 }
 
-function ListEditor({ label, suggestions, items, update, listId }) {
+function ListEditor({ label, suggestions, items, update }) {
   const [input, setInput] = useState('');
   const query = input.trim().toLowerCase();
-  const matches = suggestions.filter((item) => item.toLowerCase().includes(query)
-    && !items.some((existing) => existing.toLowerCase() === item.toLowerCase()));
-  const ordered = [...matches.filter((item) => item.toLowerCase().startsWith(query)),
-    ...matches.filter((item) => !item.toLowerCase().startsWith(query))];
-  function add() {
-    const value = input.trim();
-    if (!value || items.some((item) => item.toLowerCase() === query)) return;
+  const available = suggestions.filter((item) => !items.some((existing) => existing.toLowerCase() === item.toLowerCase()));
+  function add(text) {
+    const value = text.trim();
+    if (!value || items.some((item) => item.toLowerCase() === value.toLowerCase())) return;
     update([...items, value]);
     setInput('');
   }
   return <>
     <div className="owner-actions owner-list-input">
-      <label>{label}<input value={input} list={listId} maxLength={200} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => {
-        if (event.key === 'Enter') { event.preventDefault(); add(); }
-      }} /></label>
-      <datalist id={listId}>{ordered.map((item) => <option key={item} value={item} />)}</datalist>
-      <button className="button button-outline" type="button" disabled={!query || items.some((item) => item.toLowerCase() === query)} onClick={add}>Add</button>
+      <SuggestionInput label={label} value={input} suggestions={available} maxLength={200} onChange={setInput} onChoose={add} onSubmit={add} />
+      <button className="button button-outline" type="button" disabled={!query || items.some((item) => item.toLowerCase() === query)} onClick={() => add(input)}>Add</button>
     </div>
     <ul className="owner-chips">
       {items.map((item) => <li key={item}>{item}<button type="button" aria-label={`Remove ${item}`} onClick={() => update(items.filter((value) => value !== item))}>×</button></li>)}
@@ -96,6 +92,7 @@ export default function TurfSetup({ id, navigate, onSaved, onMediaChange, sectio
   const [attempt, setAttempt] = useState(0);
   const [suggestions, setSuggestions] = useState({});
   const [showSlotBuilder, setShowSlotBuilder] = useState(false);
+  const [pendingSlotRemoval, setPendingSlotRemoval] = useState(null);
   const [builder, setBuilder] = useState({ open: '06:00', close: '22:00', price: 0 });
 
   useEffect(() => {
@@ -139,7 +136,10 @@ export default function TurfSetup({ id, navigate, onSaved, onMediaChange, sectio
       if (isUpload) setPhotoProgress({ phase: 'done', message });
       else setNotice(message);
       if (path === '/media') onMediaChange?.(turf.media);
-      if (replaceDraft) onSaved?.(turf);
+      if (replaceDraft) {
+        setPendingSlotRemoval(null);
+        onSaved?.(turf);
+      }
       return true;
     } catch (failure) {
       if (isUpload) setPhotoProgress({ phase: 'error', message: failure.message });
@@ -212,7 +212,7 @@ export default function TurfSetup({ id, navigate, onSaved, onMediaChange, sectio
     <Wrapper className={wrapperClass}>
       {!onSaved && back}
       {!onSaved && <div className="owner-heading">
-        <h1>Set up {draft.name}</h1>
+        <h1><NameTooltip text={`Set up ${draft.name}`} fullName={draft.name} /></h1>
         <TurfStatus turf={draft} />
       </div>}
       <form className="owner-form" onSubmit={save}>
@@ -220,10 +220,10 @@ export default function TurfSetup({ id, navigate, onSaved, onMediaChange, sectio
           {showPricing && <><section className="owner-panel">
             <h2>Sports you host</h2>
             {field('Venue type', 'venueType', facilities, facility, { options: ['outdoor', 'indoor', 'hybrid'] })}
-            <ListEditor label="Find or add a sport" suggestions={suggestions[venueType]?.length ? suggestions[venueType] : sportSuggestions[venueType]} items={draft.sports} update={(items) => set('sports', items)} listId="turf-sports" />
+            <ListEditor label="Find or add a sport" suggestions={suggestions[venueType]?.length ? suggestions[venueType] : sportSuggestions[venueType]} items={draft.sports} update={(items) => set('sports', items)} />
           </section>
           <section className="owner-panel">
-            <div className="owner-heading"><h2>Daily time slots and pricing</h2>
+            <div className="owner-heading"><h2>Pricing and Slots</h2>
               <button type="button" className="button button-outline" aria-expanded={showSlotBuilder} aria-label={showSlotBuilder ? 'Close slot controls' : 'Show slot controls'} onClick={() => setShowSlotBuilder(!showSlotBuilder)}>{showSlotBuilder ? '×' : '+'}</button>
             </div>
             <p className="account-note">This schedule repeats daily. Use 24-hour times and 24:00 for midnight.</p>
@@ -239,24 +239,41 @@ export default function TurfSetup({ id, navigate, onSaved, onMediaChange, sectio
             </div></>}
             {draft.timeSlots.map((slot, index) => {
               const update = (key, value) => setRow('timeSlots', index, key, value);
-              return <div className="owner-fields owner-edit-row" key={index}>
+              return <div className={`owner-fields owner-edit-row slot-config-row${slot.isActive ? '' : ' slot-config-inactive'}`} key={index}>
                 {field('Start time', 'startTime', slot, update)}{field('End time', 'endTime', slot, update)}
                 {field('Price (₹)', 'price', slot, update, { type: 'number', min: 0, step: '.01' })}
-                <Toggle label="Active" value={slot.isActive} update={(value) => update('isActive', value)} />
-                <button type="button" className="button button-plain slot-remove" onClick={() => set('timeSlots', draft.timeSlots.filter((_, i) => i !== index))}>
-                  <TrashIcon />
-                  Remove slot
-                </button>
+                <p className="slot-row-status slot-state">{slot.isActive ? 'Active' : 'Inactive'}</p>
+                {pendingSlotRemoval === index && <p className="account-note slot-row-status" role="status">Remove the {slot.startTime}–{slot.endTime} slot?</p>}
+                <div className="owner-actions slot-row-actions">
+                  {pendingSlotRemoval === index ? (
+                    <>
+                      <button type="button" className="button button-outline" onClick={() => setPendingSlotRemoval(null)}>Cancel</button>
+                      <button type="button" className="button button-outline button-danger" onClick={() => {
+                        set('timeSlots', draft.timeSlots.filter((_, i) => i !== index));
+                        setPendingSlotRemoval(null);
+                      }}>Confirm removal</button>
+                    </>
+                  ) : (
+                    <>
+                      <button type="button" className="button button-outline" onClick={() => update('isActive', !slot.isActive)}>
+                        {slot.isActive ? 'Deactivate' : 'Reactivate'}
+                      </button>
+                      <button type="button" className="button button-outline button-danger slot-remove" onClick={() => setPendingSlotRemoval(index)}>
+                        <TrashIcon />
+                        Remove
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>;
             })}
           </section>
           <section className="owner-panel">
             <h2>Equipment rentals</h2>
-            <datalist id="turf-equipment">{equipmentSuggestions.map((item) => <option key={item} value={item} />)}</datalist>
             {draft.equipment.map((item, index) => {
               const update = (key, value) => setRow('equipment', index, key, value);
-              return <div className="owner-fields owner-edit-row" key={index}>
-                {field('Equipment name', 'name', item, update, { list: 'turf-equipment', required: true })}
+              return <div className="owner-fields owner-edit-row owner-equipment-row" key={index}>
+                <SuggestionInput label="Equipment name" value={item.name} suggestions={equipmentSuggestions} onChange={(value) => update('name', value)} required />
                 {field('Rental price (₹)', 'price', item, update, { type: 'number', min: 0, step: '.01' })}
                 {field('Maximum available count', 'maxCount', item, update, { type: 'number', min: 1, required: true })}
                 <Toggle label="Available for rent" value={item.isAvailable} update={(value) => update('isAvailable', value)} />
@@ -287,7 +304,7 @@ export default function TurfSetup({ id, navigate, onSaved, onMediaChange, sectio
           </section>}
           {showPricing && <section className="owner-panel">
             <h2>Rules and policies</h2>
-            <ListEditor label="Add a turf rule" suggestions={ruleSuggestions} items={draft.regulations} update={(items) => set('regulations', items)} listId="turf-rules" />
+            <ListEditor label="Add a turf rule" suggestions={ruleSuggestions} items={draft.regulations} update={(items) => set('regulations', items)} />
             <div className="owner-form">
               <BookingPolicyFields label="Cancellation" value={policies.cancellation} onChange={(value) => set('policies', { ...policies, cancellation: value })} />
               <BookingPolicyFields label="Rescheduling" value={rescheduling} onChange={(value) => set('policies', { ...policies, rescheduling: value })}>

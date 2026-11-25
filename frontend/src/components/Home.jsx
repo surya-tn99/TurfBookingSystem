@@ -2,6 +2,8 @@ import pitch from '../assets/pick-turf-pitch.webp';
 import outdoorPitch from '../assets/turf-outdoor.jpg';
 import topView from '../assets/turf topview.jpg';
 import LoadingImage from './LoadingImage';
+import { Dropdown } from './Dropdown';
+import NameTooltip from './NameTooltip';
 
 const sports = ['Football', 'Box cricket', 'Pickleball', 'Badminton'];
 const venues = [
@@ -45,12 +47,7 @@ export default function Home({ search, navigate }) {
 
       <form key={search} className="turf-search" aria-label="Find a turf" action="/" method="get" onSubmit={searchTurfs}>
         <label>Location <input name="location" placeholder="City or neighborhood" defaultValue={location} /></label>
-        <label>Sport
-          <select name="sport" defaultValue={selectedSport}>
-            <option value="">All sports</option>
-            {sports.map((sport) => <option key={sport}>{sport}</option>)}
-          </select>
-        </label>
+        <Dropdown label="Sport" name="sport" defaultValue={selectedSport} options={[{ value: '', label: 'All sports' }, ...sports]} />
         <button className="button button-primary" type="submit">Find turfs</button>
       </form>
 
@@ -65,7 +62,7 @@ export default function Home({ search, navigate }) {
             <article className="venue" key={venue.name}>
               <LoadingImage className="venue-image" src={venue.image} loading="lazy" />
               <div className="venue-details">
-                <h3>{venue.name}</h3>
+                <h3><NameTooltip text={venue.name} /></h3>
                 <p>{venue.area}, {venue.city}</p>
                 <ul aria-label="Sports">{venue.sports.map((sport) => <li key={sport}>{sport}</li>)}</ul>
               </div>

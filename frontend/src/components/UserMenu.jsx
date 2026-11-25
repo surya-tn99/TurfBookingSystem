@@ -1,12 +1,14 @@
 import { useId, useRef, useState } from 'react';
 import AppLink from './AppLink';
 import { managerPath } from '../ownerApi';
+import { useTextOverflow } from '../useTextOverflow';
 
 export default function UserMenu({ name, onLogout, isOwner, navigate }) {
   const [open, setOpen] = useState(false);
   const controls = useId();
   const trigger = useRef(null);
   const popover = useRef(null);
+  const [nameRef, overflowing] = useTextOverflow(name);
 
   return (
     <div
@@ -43,9 +45,10 @@ export default function UserMenu({ name, onLogout, isOwner, navigate }) {
           else setOpen((expanded) => !expanded);
         }}
       >
-        {name}
+        <span className="name-ellipsis" ref={nameRef}>{name}</span>
       </button>
       <div ref={popover} className="user-menu-popover" id={controls} hidden={!open}>
+        {overflowing && <span className="user-menu-full-name" aria-hidden="true">{name}</span>}
         {isOwner && <AppLink className="button button-outline" href={managerPath} navigate={(href) => { setOpen(false); navigate(href); }}>Dashboard</AppLink>}
         <button className="button button-outline" type="button" onClick={onLogout}>Log out</button>
       </div>
