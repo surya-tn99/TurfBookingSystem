@@ -13,22 +13,23 @@ export default function App() {
       return null;
     }
   });
-  const [page, setPage] = useState(() => window.location.hash.slice(1));
-  const mode = page === 'login' || page === 'signup' ? page : null;
+  const [hash, setHash] = useState(() => window.location.hash);
+  const path = window.location.pathname.replace(/\/$/, '') || '/';
+  const mode = path === '/login' || path === '/signup' ? path.slice(1) : null;
+  const isHome = path === '/' && !hash;
 
   useEffect(() => {
-    function updatePage() {
-      setPage(window.location.hash.slice(1));
-      window.scrollTo(0, 0);
+    function updateHash() {
+      setHash(window.location.hash);
     }
-
-    window.addEventListener('hashchange', updatePage);
-    return () => window.removeEventListener('hashchange', updatePage);
+    window.addEventListener('hashchange', updateHash);
+    return () => window.removeEventListener('hashchange', updateHash);
   }, []);
 
-  function showAccount(nextMode) {
-    window.location.hash = nextMode;
-  }
+  useEffect(() => {
+    const title = isHome ? 'Find your next game' : mode === 'login' ? 'Log in' : mode === 'signup' ? 'Sign up' : 'Page not found';
+    document.title = `${title} | PickTurf`;
+  }, [isHome, mode]);
   const handleAuthSuccess = useCallback(({ token, user: nextUser }) => {
     localStorage.setItem('turf_token', token);
     localStorage.setItem('turf_user', JSON.stringify(nextUser));
@@ -38,15 +39,15 @@ export default function App() {
   function signOut() {
     localStorage.removeItem('turf_token');
     localStorage.removeItem('turf_user');
-    showAccount('login');
     setUser(null);
+    window.location.assign('/login');
   }
 
   return (
     <>
       <header className="site-header">
         <div className="frame header-inner">
-          <a className="brand" href="#home" aria-label="PickTurf home">
+          <a className="brand" href="/" aria-label="PickTurf home">
             Pick<span>Turf</span>
           </a>
           <nav className="header-actions" aria-label="Account">
@@ -57,8 +58,8 @@ export default function App() {
               </details>
             ) : (
               <>
-                <button className="button button-plain" onClick={() => showAccount('login')}>Log in</button>
-                <button className="button button-primary" onClick={() => showAccount('signup')}>Sign up</button>
+                <a className="button button-plain" href="/login">Log in</a>
+                <a className="button button-primary" href="/signup">Sign up</a>
               </>
             )}
           </nav>
@@ -82,10 +83,16 @@ export default function App() {
               <p>You're signed in as {user.email}.</p>
             </div>
           ) : (
-            <AuthPanel mode={mode} onModeChange={showAccount} onAuthSuccess={handleAuthSuccess} />
+            <AuthPanel mode={mode} onAuthSuccess={handleAuthSuccess} />
           )}
         </section>
-      </main> : <Home />}
+      </main> : isHome ? <Home /> : (
+        <main className="frame not-found">
+          <h1>Page not found</h1>
+          <p>The page you’re looking for may have moved or the link may be incorrect.</p>
+          <a className="button button-primary" href="/">Back to home</a>
+        </main>
+      )}
 
       <footer className="frame site-footer">
         <span>© {new Date().getFullYear()} PickTurf</span>

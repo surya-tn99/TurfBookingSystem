@@ -35,6 +35,7 @@ a { color: inherit; }
   color: var(--ink);
   transition: background-color .18s, border-color .18s;
 }
+a.button { display: inline-flex; align-items: center; text-decoration: none; }
 .button-primary { background: var(--green); color: white; }
 .button-primary:hover { background: #236044; }
 .button-outline { background: transparent; border-color: #a8bcb0; }
@@ -81,9 +82,9 @@ a { color: inherit; }
 .account-card h2 { font-size: clamp(2.1rem, 4vw, 3.5rem); line-height: 1; letter-spacing: -.075em; font-weight: 950; overflow-wrap: anywhere; }
 .account-intro { margin-top: 12px; color: var(--muted); line-height: 1.5; }
 .mode-picker { display: flex; gap: 4px; border-radius: 100px; background: #edf2ec; padding: 4px; width: max-content; max-width: 100%; margin-bottom: 27px; }
-.mode-picker button { border: 0; border-radius: 100px; min-height: 40px; padding: 6px 17px; font-weight: 800; color: var(--muted); background: transparent; }
-.mode-picker button[aria-pressed='true'] { color: var(--green); background: #fff; box-shadow: 0 1px 4px #20362a1c; }
-.mode-picker button[aria-pressed='false']:hover { color: var(--ink); background: #e3ebe0; }
+.mode-picker a { display: inline-flex; align-items: center; border-radius: 100px; min-height: 40px; padding: 6px 17px; font-weight: 800; color: var(--muted); text-decoration: none; }
+.mode-picker a[aria-current='page'] { color: var(--green); background: #fff; box-shadow: 0 1px 4px #20362a1c; }
+.mode-picker a:not([aria-current]):hover { color: var(--ink); background: #e3ebe0; }
 
 .roles { margin: 24px 0 0; padding: 0; border: 0; min-inline-size: 0; }
 .roles legend { font-size: .875rem; padding: 0; margin-bottom: 8px; font-weight: 850; }
@@ -108,6 +109,17 @@ a { color: inherit; }
 .account-role { color: var(--green); background: #eaf4e9; border-radius: 100px; padding: 5px 12px; font-weight: 850; }
 .account-summary p { color: var(--muted); }
 .site-footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 20px; padding-bottom: 24px; font-size: .875rem; color: var(--muted); }
+
+.not-found {
+  display: grid;
+  justify-items: start;
+  align-content: center;
+  gap: 16px;
+  min-height: 58vh;
+  padding-block: 44px;
+}
+.not-found h1 { font-size: clamp(2.5rem, 7vw, 5rem); line-height: 1; letter-spacing: -.07em; }
+.not-found p { max-width: 44ch; color: var(--muted); }
 
 @media (max-width: 850px) {
   .frame { width: calc(100% - 40px); }

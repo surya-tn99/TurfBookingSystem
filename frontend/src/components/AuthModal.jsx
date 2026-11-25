@@ -1,13 +1,13 @@
 ﻿import { useCallback, useEffect, useRef, useState } from 'react';
 import RoleSelector from './RoleSelector';
 
-const apiBase = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/+$/, '');
-const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+const apiBase = import.meta.env.API_BASE_URL.trim().replace(/\/+$/, '');
+const clientId = import.meta.env.GOOGLE_CLIENT_ID.trim();
 const googleConfigured = Boolean(apiBase && clientId);
 let initializedIdentity;
 let activeCredentialHandler;
 
-export default function AuthPanel({ mode, onModeChange, onAuthSuccess }) {
+export default function AuthPanel({ mode, onAuthSuccess }) {
   const [role, setRole] = useState('customer');
   const [error, setError] = useState(null);
   const [pending, setPending] = useState(false);
@@ -107,17 +107,12 @@ export default function AuthPanel({ mode, onModeChange, onAuthSuccess }) {
     };
   }, [isSignUp]);
 
-  function changeMode(nextMode) {
-    setError(null);
-    onModeChange(nextMode);
-  }
-
   return (
     <>
-      <div className="mode-picker" role="group" aria-label="Account action">
-        <button type="button" aria-pressed={isSignUp} disabled={pending} onClick={() => changeMode('signup')}>Sign up</button>
-        <button type="button" aria-pressed={!isSignUp} disabled={pending} onClick={() => changeMode('login')}>Log in</button>
-      </div>
+      <nav className="mode-picker" aria-label="Account action">
+        <a href="/signup" aria-current={isSignUp ? 'page' : undefined}>Sign up</a>
+        <a href="/login" aria-current={!isSignUp ? 'page' : undefined}>Log in</a>
+      </nav>
       <h2>{isSignUp ? 'Get in the game.' : 'Welcome back.'}</h2>
       <p className="account-intro">
         {isSignUp ? 'Create your PickTurf account to get started.' : 'Log in with the Google account you used to join.'}

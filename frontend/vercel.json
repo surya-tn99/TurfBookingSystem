@@ -1,0 +1,7 @@
+{
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "^/(?:login/?|signup/?)?$", "dest": "/index.html", "methods": ["GET", "HEAD"] },
+    { "src": "/.*", "dest": "/index.html", "status": 404, "methods": ["GET", "HEAD"] }
+  ]
+}
