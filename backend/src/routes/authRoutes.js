@@ -5,7 +5,7 @@ import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-function requireAuthService(req, res, next) {
+export function requireAuthService(req, res, next) {
   res.set('Cache-Control', 'no-store');
   if (!process.env.JWT_SECRET?.trim() || !databaseReady()) return authUnavailable(res);
   return next();

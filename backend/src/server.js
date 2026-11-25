@@ -3,6 +3,8 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import { connectDB } from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
+import turfRoutes from './routes/turfRoutes.js';
+import { checkSupabaseConnection } from './services/storageService.js';
 
 dotenv.config();
 
@@ -23,9 +25,11 @@ app.use(
 
 // Connect Database
 connectDB();
+checkSupabaseConnection();
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/owner/turfs', turfRoutes);
 
 // Root Health Check
 app.get('/api/health', (req, res) => {

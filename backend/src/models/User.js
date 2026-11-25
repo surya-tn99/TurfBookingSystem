@@ -64,4 +64,6 @@ const userSchema = new mongoose.Schema(
   }
 );
 
+userSchema.index({ phone: 1 }, { unique: true, partialFilterExpression: { phone: { $type: 'string', $gt: '' } } });
+
 export const User = mongoose.model('User', userSchema);

@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import { isDatabaseUnavailable } from '../config/db.js';
 import { User } from '../models/User.js';
+import { accountPhone } from '../services/phone.js';
 
 const googleClient = new OAuth2Client();
 const signupRoles = ['customer', 'owner'];
@@ -11,6 +12,7 @@ function accountProfile(user) {
     id: user.id,
     name: user.name,
     email: user.email,
+    phone: user.phone || '',
     role: user.role,
     avatar: user.avatar,
     walletBalance: user.walletBalance || 0,
@@ -116,14 +118,11 @@ export function getMe(req, res) {
 export async function completeProfile(req, res, next) {
   const { name, phone } = req.body ?? {};
   const fullName = typeof name === 'string' ? name.trim() : '';
-  const phoneDigits = typeof phone === 'string' && phone.length <= 32
-    ? phone.trim().replace(/[\s()-]/g, '')
-    : '';
-  const normalizedPhone = /^\d{10}$/.test(phoneDigits) ? '+91' + phoneDigits : phoneDigits;
+  const normalizedPhone = accountPhone(phone);
   if (!fullName || fullName.length > 100) {
     return res.status(400).json({ success: false, message: 'Enter a name between 1 and 100 characters.' });
   }
-  if (!/^\+[1-9]\d{7,14}$/.test(normalizedPhone)) {
+  if (!normalizedPhone) {
     return res.status(400).json({ success: false, message: 'Enter a 10-digit Indian phone number or include your country code.' });
   }
 
@@ -131,7 +130,7 @@ export async function completeProfile(req, res, next) {
     const updatedUser = await User.findOneAndUpdate(
       { _id: req.user.id, isActive: true, needsProfile: true },
       { $set: { name: fullName, phone: normalizedPhone, needsProfile: false } },
-      { new: true, runValidators: true },
+      { returnDocument: 'after', runValidators: true },
     );
     const user = updatedUser ?? await User.findById(req.user.id);
     if (!user?.isActive) {
@@ -139,6 +138,9 @@ export async function completeProfile(req, res, next) {
     }
     return res.json({ success: true, user: accountProfile(user) });
   } catch (error) {
+    if (error.code === 11000 && error.keyPattern?.phone) {
+      return res.status(409).json({ message: 'This phone number is already used by a PickTurf account.' });
+    }
     if (isDatabaseUnavailable(error)) return authUnavailable(res);
     return next(error);
   }

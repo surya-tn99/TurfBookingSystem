@@ -2,16 +2,21 @@
 import AppLink from './components/AppLink';
 import AuthPanel from './components/AuthModal';
 import Home from './components/Home';
+import { OwnerDashboard, TurfRegistration } from './components/OwnerTurfs';
 import ProfileSetup from './components/ProfileSetup';
+import Skeleton from './components/Skeleton';
+import TurfSetup from './components/TurfSetup';
+import TurfDetails from './components/TurfDetails';
 import UserMenu from './components/UserMenu';
 import pitch from './assets/pick-turf-pitch.webp';
 import { apiBase, authPageHref, loginReturnPath, requestAuth, serviceUnavailableMessage } from './auth';
 import { useNavigation } from './navigation';
+import { managerPath } from './ownerApi';
 
 const roleNames = { customer: 'Player', owner: 'Turf owner', staff: 'Turf staff' };
 
 function landingPageFor(user) {
-  return user.role === 'owner' ? '/owner' : '/';
+  return user.role === 'owner' ? managerPath : '/';
 }
 
 function savedToken() {
@@ -36,7 +41,10 @@ export default function App() {
   const mode = path === '/login' || path === '/signup' ? path.slice(1) : null;
   const isHome = path === '/' && !hash;
   const isProfile = path === '/complete-profile';
-  const isOwner = path === '/owner';
+  const turfMatch = /^\/turfManeger\/turfs\/([a-fA-F0-9]{24})(\/setup)?$/.exec(path);
+  const isDashboard = path === managerPath;
+  const isRegistration = path === managerPath + '/turfs/new';
+  const isOwner = isDashboard || isRegistration || Boolean(turfMatch);
   const isProtected = isProfile || isOwner;
   const returnPath = mode ? loginReturnPath(new URLSearchParams(search).get('returnTo'))
     : isHome ? '/' + search : '/';
@@ -105,10 +113,10 @@ export default function App() {
   }, [sessionCheck]);
 
   useEffect(() => {
-    const titles = { login: 'Log in', signup: 'Sign up', '/complete-profile': 'Complete your profile', '/owner': 'Turf owner' };
-    const title = isHome ? 'Find your next game' : titles[mode || path] || 'Page not found';
+    const titles = { login: 'Log in', signup: 'Sign up', '/complete-profile': 'Complete your profile', [managerPath]: 'Dashboard' };
+    const title = isHome ? 'Find your next game' : titles[mode || path] || (isOwner ? 'Manage turfs' : 'Page not found');
     document.title = `${title} | PickTurf`;
-  }, [isHome, mode, path]);
+  }, [isHome, isOwner, mode, path]);
 
   useEffect(() => {
     if (redirectTo) navigate(redirectTo, { replace: true });
@@ -120,7 +128,7 @@ export default function App() {
     setUser(nextUser);
     setSessionStatus('verified');
     if (nextUser.needsProfile) navigate('/complete-profile', { replace: true });
-    else if (mode === 'login') navigate(returnPath, { replace: true });
+    else if (mode === 'login') navigate(nextUser.role === 'owner' ? managerPath : returnPath, { replace: true });
   }, [mode, navigate, returnPath]);
 
   function finishProfile(nextUser) {
@@ -144,9 +152,12 @@ export default function App() {
           </AppLink>
           <nav className="header-actions" aria-label="Account">
             {user ? (
-              <UserMenu name={user.name} onLogout={signOut} />
+              <>
+                {isDashboard && user.role === 'owner' && <AppLink className="button button-primary" href={managerPath + '/turfs/new'} navigate={navigate}>Add turf</AppLink>}
+                <UserMenu name={user.name} onLogout={signOut} isOwner={user.role === 'owner' && !isDashboard} navigate={navigate} />
+              </>
             ) : sessionStatus === 'checking' ? (
-              <span className="account-note" role="status">Checking session…</span>
+              <Skeleton variant="account" label="Checking session…" />
             ) : (
               <>
                 <AppLink className="button button-plain" href={authPageHref('login', returnPath)} navigate={navigate}>Log in</AppLink>
@@ -166,18 +177,18 @@ export default function App() {
 
       {redirectTo || (isProtected && !user) ? (
         <main className="frame profile-layout">
-          {sessionStatus !== 'unavailable' && <p className="account-note" role="status">Checking your PickTurf session…</p>}
+          {sessionStatus !== 'unavailable' && <Skeleton label="Checking your PickTurf session…" />}
         </main>
       ) : isProfile ? (
         <ProfileSetup key={user.id} user={user} token={savedToken()} onComplete={finishProfile} onLogout={signOut} />
+      ) : isRegistration ? (
+        <TurfRegistration user={user} navigate={navigate} />
+      ) : turfMatch?.[2] ? (
+        <TurfSetup key={turfMatch[1]} id={turfMatch[1]} navigate={navigate} />
+      ) : turfMatch ? (
+        <TurfDetails key={turfMatch[1]} id={turfMatch[1]} ownerEmail={user.email} navigate={navigate} />
       ) : isOwner ? (
-        <main className="frame profile-layout">
-          <section className="account-card" aria-labelledby="owner-title">
-            <h1 id="owner-title">Welcome, {user.name}.</h1>
-            <p className="account-intro">Your turf owner profile is complete. Turf registration will be available in a future update.</p>
-            <AppLink className="button button-outline auth-home-link" href="/" navigate={navigate}>Back to home</AppLink>
-          </section>
-        </main>
+        <OwnerDashboard user={user} navigate={navigate} />
       ) : mode ? <main className="frame main-layout">
         <section className="pitch" aria-labelledby="pitch-title">
           <img src={pitch} alt="" fetchPriority="high" />
@@ -198,7 +209,7 @@ export default function App() {
               <p>You're signed in as {user.email}.</p>
             </div>
           ) : sessionStatus === 'checking' ? (
-            <p className="account-note">Checking your PickTurf session…</p>
+            <Skeleton label="Checking your PickTurf session…" />
           ) : (
             <AuthPanel key={mode + search} mode={mode} returnPath={returnPath} navigate={navigate} onAuthSuccess={handleAuthSuccess} />
           )}
@@ -214,7 +225,6 @@ export default function App() {
 
       <footer className="frame site-footer">
         <span>© {new Date().getFullYear()} PickTurf</span>
-        <span>Football · Box cricket · Pickleball · Badminton</span>
       </footer>
     </>
   );

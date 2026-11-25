@@ -1,7 +1,7 @@
 {
   "routes": [
     { "handle": "filesystem" },
-    { "src": "^/(?:(?:login|signup|complete-profile|owner)/?)?$", "dest": "/index.html", "methods": ["GET", "HEAD"] },
+    { "src": "^/(?:(?:login|signup|complete-profile|(?:owner|turfManeger)(?:/turfs/(?:new|[a-fA-F0-9]{24}(?:/setup)?))?)/?)?$", "dest": "/index.html", "methods": ["GET", "HEAD"] },
     { "src": "/.*", "dest": "/index.html", "status": 404, "methods": ["GET", "HEAD"] }
   ]
 }

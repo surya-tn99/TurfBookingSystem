@@ -1,6 +1,7 @@
 import pitch from '../assets/pick-turf-pitch.webp';
 import outdoorPitch from '../assets/turf-outdoor.jpg';
 import topView from '../assets/turf topview.jpg';
+import LoadingImage from './LoadingImage';
 
 const sports = ['Football', 'Box cricket', 'Pickleball', 'Badminton'];
 const venues = [
@@ -35,7 +36,7 @@ export default function Home({ search, navigate }) {
   return (
     <main className="frame home">
       <section className="pitch home-pitch" aria-labelledby="home-title">
-        <img src={topView} alt="" fetchPriority="high" />
+        <LoadingImage src={topView} fetchPriority="high" />
         <div className="pitch-copy">
           <h1 id="home-title">Find your next <em>game.</em></h1>
           <p>Find a place to play with your team, close to home.</p>
@@ -62,7 +63,7 @@ export default function Home({ search, navigate }) {
         <div className="venue-grid">
           {results.map((venue) => (
             <article className="venue" key={venue.name}>
-              <div className="venue-image"><img src={venue.image} alt="" loading="lazy" /></div>
+              <LoadingImage className="venue-image" src={venue.image} loading="lazy" />
               <div className="venue-details">
                 <h3>{venue.name}</h3>
                 <p>{venue.area}, {venue.city}</p>

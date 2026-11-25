@@ -141,7 +141,7 @@ a.button { display: inline-flex; align-items: center; text-decoration: none; }
 .not-found p { max-width: 44ch; color: var(--muted); }
 
 @media (max-width: 850px) {
-  .frame { width: calc(100% - 40px); }
+  .frame { width: calc(100% - 140px); }
   .main-layout { grid-template-columns: 1fr; gap: 14px; }
   .pitch { min-height: 360px; }
 }
@@ -239,3 +239,93 @@ a.button { display: inline-flex; align-items: center; text-decoration: none; }
 }
 .user-menu-popover button { background: #fff; }
 .user-menu-popover button:hover { background: #e3ebe0; }
+
+.user-menu-popover:not([hidden]) { display: grid; gap: 4px; }
+.user-menu-popover a { background: #fff; }
+.owner-page { padding-block: clamp(24px, 5vw, 64px); display: grid; gap: 20px; }
+.owner-narrow { max-width: 880px; }
+.owner-page h1 { font-size: clamp(2.3rem, 6vw, 4rem); line-height: 1.04; letter-spacing: -.07em; overflow-wrap: anywhere; }
+.owner-page h2, .owner-page h3 { margin: 0; letter-spacing: -.025em; }
+.owner-heading, .owner-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.owner-heading { justify-content: space-between; }
+.owner-turfs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 185px), 1fr)); gap: 12px; margin: 0; }
+.owner-panel { background: white; border: 1px solid #dce5da; border-radius: 20px; padding: clamp(15px, 3vw, 26px); }
+.owner-form, .owner-form-fields, .owner-form .owner-panel, .owner-turf { display: grid; gap: 16px; }
+.owner-form-fields { margin: 0; padding: 0; border: 0; min-inline-size: 0; }
+.owner-form label:not(.owner-agreement) { display: grid; gap: 6px; font-weight: 800; min-width: 0; }
+.owner-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 14px; align-items: end; }
+.owner-form input:not([type="checkbox"]), .owner-form select {
+  width: 100%; min-height: 42px; padding: 7px 10px; border: 1px solid #adc0ae;
+  border-radius: 9px; background: #fff; color: var(--ink); font: inherit; font-weight: 500;
+}
+.owner-agreement { display: flex; align-items: center; gap: 9px; padding: 9px 0; font-weight: 750; }
+.owner-agreement input { width: 18px; height: 18px; accent-color: var(--green); }
+.facility-amenities {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
+  gap: 8px 14px;
+}
+.facility-amenities input { flex: none; }
+@media (max-width: 520px) {
+  .facility-amenities { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.owner-edit-row, .owner-facility { border-top: 1px solid #e2e8e0; padding-top: 12px; }
+.owner-list-input { align-items: end; }
+.owner-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 0; list-style: none; }
+.owner-chips li, .turf-status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #eef4ed; color: #24553d; font-size: .875rem; font-weight: 800; }
+.owner-chips button { padding: 2px 4px; border: 0; background: transparent; color: inherit; }
+.turf-status-pending { background: #fff1ce; color: #684900; }
+.turf-status-rejected { background: #fff0ed; color: #8e3023; }
+.owner-turf-photo { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 10px; }
+.photo-upload-progress { display: grid; gap: 6px; }
+.photo-upload-status { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.photo-upload-progress progress { width: 100%; height: 12px; accent-color: var(--green); }
+.registration-submit:disabled { cursor: not-allowed; }
+.registration-submit[aria-busy='true'] { cursor: wait; }
+.registration-location { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.registration-identity { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.registration-full { grid-column: 1 / -1; }
+.owner-back { justify-self: start; }
+.owner-back::before { content: '‹'; font-size: 1.35em; margin-right: 8px; line-height: 1; }
+.slot-remove { display: inline-flex; align-items: center; gap: 5px; justify-content: center; }
+.slot-trash { color: #b42318; width: 18px; height: 18px; flex: none; }
+.owner-turf-grid { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 16px; }
+.owner-turf-grid .owner-turf { position: relative; flex: 0 0 calc((100% - 32px) / 3); min-width: 0; text-decoration: none; align-content: start; }
+.owner-turf-grid .owner-turf:hover { border-color: #71987b; }
+.owner-turf-grid .turf-status { position: absolute; top: 12px; right: 12px; }
+.turf-image-empty { background: #e8ece5; }
+.loading-status { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.skeleton-layout { display: grid; gap: 16px; }
+.skeleton-block { background: #e8ece5; border-radius: 8px; }
+.skeleton-title { width: min(70%, 290px); height: 22px; }
+.skeleton-line { width: 85%; height: 14px; }
+.skeleton-short { width: min(45%, 170px); height: 14px; }
+.skeleton-account { display: block; width: 104px; height: 35px; border-radius: 999px; }
+.image-shell { display: block; overflow: hidden; }
+.image-shell img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.image-shell-pending, .image-shell-unavailable { background: #e8ece5; }
+.image-shell-pending img, .image-shell-unavailable img { visibility: hidden; }
+.pitch .image-shell { position: absolute; inset: 0; z-index: -1; }
+.pitch .image-shell img { z-index: auto; }
+.pitch .image-shell-pending, .pitch .image-shell-unavailable { background: #3d6552; }
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton-block, .image-shell-pending { animation: skeleton-pulse 1.6s ease-in-out infinite alternate; }
+  @keyframes skeleton-pulse { to { opacity: .48; } }
+}
+.turf-detail-photo { display: block; width: 100%; height: clamp(190px, 36vw, 420px); border-radius: 20px; object-fit: cover; }
+.turf-slideshow-image { display: block; width: 100%; padding: 0; border: 0; border-radius: 20px; background: transparent; }
+.turf-detail-nav button[aria-pressed='true'] { background: var(--green); color: white; }
+.turf-detail-edit-actions { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 1fr); }
+.turf-detail-edit-actions .button { overflow-wrap: anywhere; }
+.button-danger { color: #a1281a; border-color: #c8867e; }
+.button-danger:hover { background: #fff0ed; }
+.owner-form textarea { font: inherit; padding: 10px; border: 1px solid #adc0ae; border-radius: 9px; min-height: 85px; }
+@media (max-width: 700px) {
+  .frame { width: calc(100% - 32px); }
+  .owner-turf-grid .owner-turf { flex-basis: calc((100% - 16px) / 2); }
+}
+@media (max-width: 460px) {
+  .registration-location, .registration-identity { grid-template-columns: 1fr; }
+  .owner-turf-grid .owner-turf { flex-basis: 100%; }
+}

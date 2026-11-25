@@ -1,10 +1,12 @@
 import { useId, useRef, useState } from 'react';
+import AppLink from './AppLink';
+import { managerPath } from '../ownerApi';
 
-export default function UserMenu({ name, onLogout }) {
+export default function UserMenu({ name, onLogout, isOwner, navigate }) {
   const [open, setOpen] = useState(false);
   const controls = useId();
   const trigger = useRef(null);
-  const logoutButton = useRef(null);
+  const popover = useRef(null);
 
   return (
     <div
@@ -13,7 +15,7 @@ export default function UserMenu({ name, onLogout }) {
         if (event.pointerType === 'mouse') setOpen(true);
       }}
       onPointerLeave={(event) => {
-        if (event.pointerType === 'mouse' && document.activeElement !== logoutButton.current) setOpen(false);
+        if (event.pointerType === 'mouse' && !popover.current?.contains(document.activeElement)) setOpen(false);
       }}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
@@ -43,8 +45,9 @@ export default function UserMenu({ name, onLogout }) {
       >
         {name}
       </button>
-      <div className="user-menu-popover" id={controls} hidden={!open}>
-        <button ref={logoutButton} className="button button-outline" type="button" onClick={onLogout}>Log out</button>
+      <div ref={popover} className="user-menu-popover" id={controls} hidden={!open}>
+        {isOwner && <AppLink className="button button-outline" href={managerPath} navigate={(href) => { setOpen(false); navigate(href); }}>Dashboard</AppLink>}
+        <button className="button button-outline" type="button" onClick={onLogout}>Log out</button>
       </div>
     </div>
   );

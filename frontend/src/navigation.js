@@ -8,7 +8,8 @@ const legacyPaths = new Map([
 
 export function normalizeLegacyRoute() {
   const { pathname, search, hash } = window.location;
-  const legacyPath = pathname === '/' ? legacyPaths.get(hash) : undefined;
+  const ownerPath = /^\/owner(?=\/|$)/.test(pathname) ? pathname.replace(/^\/owner/, '/turfManeger') : undefined;
+  const legacyPath = ownerPath || (pathname === '/' ? legacyPaths.get(hash) : undefined);
   if (legacyPath) window.history.replaceState(null, '', legacyPath + search);
 }
 
@@ -42,6 +43,7 @@ export function useNavigation() {
     if (replace) window.history.replaceState(null, '', target.href);
     else window.history.pushState(null, '', target.href);
 
+    normalizeLegacyRoute();
     setRoute(currentRoute());
     if (target.pathname !== from) window.scrollTo(0, 0);
   }, []);
