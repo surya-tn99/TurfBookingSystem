@@ -145,12 +145,12 @@ export default function App() {
 
   return (
     <>
-      {!mode && !isProfile && !redirectTo && <header className="site-header">
+      {!isProfile && !redirectTo && <header className={mode ? 'site-header auth-mobile-header' : 'site-header'}>
         <div className="frame header-inner">
           <AppLink className="brand" href="/" navigate={navigate} aria-label="PickTurf home">
             Pick<span>Turf</span>
           </AppLink>
-          <nav className="header-actions" aria-label="Account">
+          {!mode && <nav className="header-actions" aria-label="Account">
             {user ? (
               <>
                 {isDashboard && user.role === 'owner' && <AppLink className="button button-primary" href={managerPath + '/turfs/new'} navigate={navigate}>Add turf</AppLink>}
@@ -164,7 +164,7 @@ export default function App() {
                 <AppLink className="button button-primary" href={authPageHref('signup', returnPath)} navigate={navigate}>Sign up</AppLink>
               </>
             )}
-          </nav>
+          </nav>}
         </div>
       </header>}
 

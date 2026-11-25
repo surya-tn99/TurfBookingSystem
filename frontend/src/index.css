@@ -21,6 +21,7 @@ a { color: inherit; }
 
 .frame { width: min(1280px, calc(100% - 80px)); margin-inline: auto; }
 .site-header { border-bottom: 1px solid #dce3d9; }
+.auth-mobile-header { display: none; }
 .header-inner, .header-actions, .brand { display: flex; align-items: center; }
 .header-inner { min-height: 78px; justify-content: space-between; gap: 16px; }
 .header-actions { gap: 10px; }
@@ -323,6 +324,9 @@ a.button { display: inline-flex; align-items: center; text-decoration: none; }
 .owner-form textarea { font: inherit; padding: 10px; border: 1px solid #adc0ae; border-radius: 9px; min-height: 85px; }
 @media (max-width: 700px) {
   .frame { width: calc(100% - 32px); }
+  .auth-mobile-header { display: block; }
+  .auth-mobile-header .header-inner { min-height: 58px; }
+  .main-layout .account-brand { display: none; }
   .owner-turf-grid .owner-turf { flex-basis: calc((100% - 16px) / 2); }
 }
 @media (max-width: 460px) {

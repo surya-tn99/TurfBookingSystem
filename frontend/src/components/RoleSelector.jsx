@@ -9,7 +9,7 @@
         </label>
         <label className="role-option">
           <input type="radio" name="role" value="owner" checked={selectedRole === 'owner'} onChange={() => onSelectRole('owner')} />
-          <span><strong>Turf owner</strong><small>I run a sports venue</small></span>
+          <span><strong>Turf manager</strong><small>I manage a sport venue</small></span>
         </label>
       </div>
     </fieldset>
