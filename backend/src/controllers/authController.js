@@ -14,6 +14,7 @@ function accountProfile(user) {
     role: user.role,
     avatar: user.avatar,
     walletBalance: user.walletBalance || 0,
+    needsProfile: user.needsProfile === true,
   };
 }
 
@@ -79,6 +80,7 @@ export async function googleAuth(req, res, next) {
           googleId,
           avatar: picture || '',
           role,
+          needsProfile: true,
         });
         return sendSession(res, user, 201);
       } catch (error) {
@@ -109,4 +111,35 @@ export async function googleAuth(req, res, next) {
 
 export function getMe(req, res) {
   return res.json({ success: true, user: accountProfile(req.user) });
+}
+
+export async function completeProfile(req, res, next) {
+  const { name, phone } = req.body ?? {};
+  const fullName = typeof name === 'string' ? name.trim() : '';
+  const phoneDigits = typeof phone === 'string' && phone.length <= 32
+    ? phone.trim().replace(/[\s()-]/g, '')
+    : '';
+  const normalizedPhone = /^\d{10}$/.test(phoneDigits) ? '+91' + phoneDigits : phoneDigits;
+  if (!fullName || fullName.length > 100) {
+    return res.status(400).json({ success: false, message: 'Enter a name between 1 and 100 characters.' });
+  }
+  if (!/^\+[1-9]\d{7,14}$/.test(normalizedPhone)) {
+    return res.status(400).json({ success: false, message: 'Enter a 10-digit Indian phone number or include your country code.' });
+  }
+
+  try {
+    const updatedUser = await User.findOneAndUpdate(
+      { _id: req.user.id, isActive: true, needsProfile: true },
+      { $set: { name: fullName, phone: normalizedPhone, needsProfile: false } },
+      { new: true, runValidators: true },
+    );
+    const user = updatedUser ?? await User.findById(req.user.id);
+    if (!user?.isActive) {
+      return res.status(401).json({ success: false, message: 'User not found or inactive' });
+    }
+    return res.json({ success: true, user: accountProfile(user) });
+  } catch (error) {
+    if (isDatabaseUnavailable(error)) return authUnavailable(res);
+    return next(error);
+  }
 }

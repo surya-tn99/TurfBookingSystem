@@ -2,12 +2,17 @@
 import AppLink from './components/AppLink';
 import AuthPanel from './components/AuthModal';
 import Home from './components/Home';
+import ProfileSetup from './components/ProfileSetup';
 import UserMenu from './components/UserMenu';
 import pitch from './assets/pick-turf-pitch.webp';
 import { apiBase, authPageHref, loginReturnPath, requestAuth, serviceUnavailableMessage } from './auth';
 import { useNavigation } from './navigation';
 
 const roleNames = { customer: 'Player', owner: 'Turf owner', staff: 'Turf staff' };
+
+function landingPageFor(user) {
+  return user.role === 'owner' ? '/owner' : '/';
+}
 
 function savedToken() {
   try {
@@ -30,8 +35,16 @@ export default function App() {
   const path = pathname.replace(/\/$/, '') || '/';
   const mode = path === '/login' || path === '/signup' ? path.slice(1) : null;
   const isHome = path === '/' && !hash;
+  const isProfile = path === '/complete-profile';
+  const isOwner = path === '/owner';
+  const isProtected = isProfile || isOwner;
   const returnPath = mode ? loginReturnPath(new URLSearchParams(search).get('returnTo'))
     : isHome ? '/' + search : '/';
+  let redirectTo;
+  if (user?.needsProfile && !isProfile) redirectTo = '/complete-profile';
+  else if (isProfile && user && !user.needsProfile) redirectTo = landingPageFor(user);
+  else if (isProtected && sessionStatus === 'guest') redirectTo = '/login';
+  else if (isOwner && user && user.role !== 'owner') redirectTo = '/';
 
   const recheckSession = useCallback(() => {
     setUser(null);
@@ -92,16 +105,28 @@ export default function App() {
   }, [sessionCheck]);
 
   useEffect(() => {
-    const title = isHome ? 'Find your next game' : mode === 'login' ? 'Log in' : mode === 'signup' ? 'Sign up' : 'Page not found';
+    const titles = { login: 'Log in', signup: 'Sign up', '/complete-profile': 'Complete your profile', '/owner': 'Turf owner' };
+    const title = isHome ? 'Find your next game' : titles[mode || path] || 'Page not found';
     document.title = `${title} | PickTurf`;
-  }, [isHome, mode]);
+  }, [isHome, mode, path]);
+
+  useEffect(() => {
+    if (redirectTo) navigate(redirectTo, { replace: true });
+  }, [navigate, redirectTo]);
+
   const handleAuthSuccess = useCallback(({ token, user: nextUser }) => {
     localStorage.removeItem('turf_user');
     localStorage.setItem('turf_token', token);
     setUser(nextUser);
     setSessionStatus('verified');
-    if (mode === 'login') navigate(returnPath, { replace: true });
+    if (nextUser.needsProfile) navigate('/complete-profile', { replace: true });
+    else if (mode === 'login') navigate(returnPath, { replace: true });
   }, [mode, navigate, returnPath]);
+
+  function finishProfile(nextUser) {
+    setUser(nextUser);
+    navigate(landingPageFor(nextUser), { replace: true });
+  }
 
   function signOut() {
     clearSavedSession();
@@ -112,7 +137,7 @@ export default function App() {
 
   return (
     <>
-      {!mode && <header className="site-header">
+      {!mode && !isProfile && !redirectTo && <header className="site-header">
         <div className="frame header-inner">
           <AppLink className="brand" href="/" navigate={navigate} aria-label="PickTurf home">
             Pick<span>Turf</span>
@@ -139,7 +164,21 @@ export default function App() {
         </div>
       )}
 
-      {mode ? <main className="frame main-layout">
+      {redirectTo || (isProtected && !user) ? (
+        <main className="frame profile-layout">
+          {sessionStatus !== 'unavailable' && <p className="account-note" role="status">Checking your PickTurf session…</p>}
+        </main>
+      ) : isProfile ? (
+        <ProfileSetup key={user.id} user={user} token={savedToken()} onComplete={finishProfile} onLogout={signOut} />
+      ) : isOwner ? (
+        <main className="frame profile-layout">
+          <section className="account-card" aria-labelledby="owner-title">
+            <h1 id="owner-title">Welcome, {user.name}.</h1>
+            <p className="account-intro">Your turf owner profile is complete. Turf registration will be available in a future update.</p>
+            <AppLink className="button button-outline auth-home-link" href="/" navigate={navigate}>Back to home</AppLink>
+          </section>
+        </main>
+      ) : mode ? <main className="frame main-layout">
         <section className="pitch" aria-labelledby="pitch-title">
           <img src={pitch} alt="" fetchPriority="high" />
           <div className="pitch-copy">

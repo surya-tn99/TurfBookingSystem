@@ -32,6 +32,10 @@ const userSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    needsProfile: {
+      type: Boolean,
+      default: false,
+    },
     // Wallet balance specifically for customer users
     walletBalance: {
       type: Number,
