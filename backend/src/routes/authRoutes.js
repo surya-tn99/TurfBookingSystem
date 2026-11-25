@@ -1,11 +1,17 @@
 import express from 'express';
-import { googleAuth, devLogin, getMe } from '../controllers/authController.js';
+import { databaseReady } from '../config/db.js';
+import { authUnavailable, googleAuth, getMe } from '../controllers/authController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-router.post('/google', googleAuth);
-router.post('/dev-login', devLogin);
-router.get('/me', protect, getMe);
+function requireAuthService(req, res, next) {
+  res.set('Cache-Control', 'no-store');
+  if (!process.env.JWT_SECRET?.trim() || !databaseReady()) return authUnavailable(res);
+  return next();
+}
+
+router.post('/google', requireAuthService, googleAuth);
+router.get('/me', requireAuthService, protect, getMe);
 
 export default router;

@@ -1,4 +1,3 @@
-﻿import { useState } from 'react';
 import pitch from '../assets/pick-turf-pitch.webp';
 import outdoorPitch from '../assets/turf-outdoor.jpg';
 import topView from '../assets/turf topview.jpg';
@@ -12,24 +11,20 @@ const venues = [
 ];
 
 export default function Home() {
-  const [search, setSearch] = useState(null);
-  const results = search ? venues.filter((venue) => {
-    const location = (venue.area + ' ' + venue.city).toLowerCase();
-    const matchesLocation = search.location === 'bangalore'
+  const params = new URLSearchParams(window.location.search);
+  const searched = params.has('location') || params.has('sport');
+  const location = params.get('location')?.trim() || '';
+  const sport = params.get('sport') || '';
+  const selectedSport = sports.includes(sport) ? sport : '';
+  const locationQuery = location.toLowerCase();
+  const results = searched ? venues.filter((venue) => {
+    const venueLocation = (venue.area + ' ' + venue.city).toLowerCase();
+    const matchesLocation = locationQuery === 'bangalore'
       ? venue.city === 'Bengaluru'
-      : location.includes(search.location);
+      : venueLocation.includes(locationQuery);
     return matchesLocation
-      && (!search.sport || venue.sports.includes(search.sport));
+      && (!selectedSport || venue.sports.includes(selectedSport));
   }) : venues;
-
-  function findTurfs(event) {
-    event.preventDefault();
-    const fields = new FormData(event.currentTarget);
-    setSearch({
-      location: fields.get('location').trim().toLowerCase(),
-      sport: fields.get('sport'),
-    });
-  }
 
   return (
     <main className="frame home">
@@ -41,10 +36,10 @@ export default function Home() {
         </div>
       </section>
 
-      <form className="turf-search" aria-label="Find a turf" onSubmit={findTurfs}>
-        <label>Location <input name="location" placeholder="City or neighborhood" /></label>
+      <form className="turf-search" aria-label="Find a turf" action="/" method="get">
+        <label>Location <input name="location" placeholder="City or neighborhood" defaultValue={location} /></label>
         <label>Sport
-          <select name="sport" defaultValue="">
+          <select name="sport" defaultValue={selectedSport}>
             <option value="">All sports</option>
             {sports.map((sport) => <option key={sport}>{sport}</option>)}
           </select>
@@ -53,9 +48,9 @@ export default function Home() {
       </form>
 
       <section className="home-section" aria-labelledby="results-title">
-        <h2 id="results-title">{search ? 'Search results' : 'Explore sample turfs'}</h2>
+        <h2 id="results-title">{searched ? 'Search results' : 'Explore sample turfs'}</h2>
         <p className="home-note" role="status">
-          {search && (results.length ? results.length + (results.length === 1 ? ' match. ' : ' matches. ') : 'No matches. Try another location or sport. ')}
+          {searched && (results.length ? results.length + (results.length === 1 ? ' match. ' : ' matches. ') : 'No matches. Try another location or sport. ')}
           Listings and photos are illustrative.
         </p>
         <div className="venue-grid">

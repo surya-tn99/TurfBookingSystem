@@ -1,13 +1,13 @@
 ﻿import { useCallback, useEffect, useRef, useState } from 'react';
+import { apiBase, authPageHref, requestAuth, serviceUnavailableMessage } from '../auth';
 import RoleSelector from './RoleSelector';
 
-const apiBase = import.meta.env.API_BASE_URL.trim().replace(/\/+$/, '');
 const clientId = import.meta.env.GOOGLE_CLIENT_ID.trim();
 const googleConfigured = Boolean(apiBase && clientId);
 let initializedIdentity;
 let activeCredentialHandler;
 
-export default function AuthPanel({ mode, onAuthSuccess }) {
+export default function AuthPanel({ mode, returnPath, onAuthSuccess }) {
   const [role, setRole] = useState('customer');
   const [error, setError] = useState(null);
   const [pending, setPending] = useState(false);
@@ -23,7 +23,7 @@ export default function AuthPanel({ mode, onAuthSuccess }) {
     setPending(true);
 
     try {
-      const response = await fetch(`${apiBase}/auth/google`, {
+      const response = await requestAuth('google', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...fields, isSignUp }),
@@ -35,7 +35,7 @@ export default function AuthPanel({ mode, onAuthSuccess }) {
       }
       onAuthSuccess(data);
     } catch {
-      setError({ mode, message: 'Could not connect to PickTurf. Please try again.' });
+      setError({ mode, message: serviceUnavailableMessage });
     } finally {
       submitting.current = false;
       setPending(false);
@@ -110,8 +110,8 @@ export default function AuthPanel({ mode, onAuthSuccess }) {
   return (
     <>
       <nav className="mode-picker" aria-label="Account action">
-        <a href="/signup" aria-current={isSignUp ? 'page' : undefined}>Sign up</a>
-        <a href="/login" aria-current={!isSignUp ? 'page' : undefined}>Log in</a>
+        <a href={authPageHref('signup', returnPath)} aria-current={isSignUp ? 'page' : undefined}>Sign up</a>
+        <a href={authPageHref('login', returnPath)} aria-current={!isSignUp ? 'page' : undefined}>Log in</a>
       </nav>
       <h2>{isSignUp ? 'Get in the game.' : 'Welcome back.'}</h2>
       <p className="account-intro">

@@ -105,6 +105,7 @@ a.button { display: inline-flex; align-items: center; text-decoration: none; }
 .google-action { display: grid; justify-items: start; margin-block: 22px 12px; }
 .account-note { color: var(--muted); font-size: .875rem; line-height: 1.5; }
 .auth-error { margin-top: 16px; padding: 10px 13px; border-radius: 9px; background: #fff0ed; color: #8e3023; font-size: .9rem; }
+.session-notice { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
 .account-summary { display: grid; justify-items: start; gap: 15px; overflow-wrap: anywhere; }
 .account-role { color: var(--green); background: #eaf4e9; border-radius: 100px; padding: 5px 12px; font-weight: 850; }
 .account-summary p { color: var(--muted); }

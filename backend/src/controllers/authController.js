@@ -1,241 +1,112 @@
 import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
+import { isDatabaseUnavailable } from '../config/db.js';
 import { User } from '../models/User.js';
 
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const googleClient = new OAuth2Client();
+const signupRoles = ['customer', 'owner'];
 
-const generateToken = (id, role) => {
-  return jwt.sign(
-    { id, role },
-    process.env.JWT_SECRET || 'dev_jwt_secret_fallback',
-    {
-      expiresIn: process.env.JWT_EXPIRES_IN || '7d',
-    }
+function accountProfile(user) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    avatar: user.avatar,
+    walletBalance: user.walletBalance || 0,
+  };
+}
+
+function sendSession(res, user, status) {
+  const token = jwt.sign(
+    { id: user.id, role: user.role },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' },
   );
-};
+  return res.status(status).json({
+    success: true,
+    message: status === 201 ? 'Account created successfully' : 'Login successful',
+    token,
+    user: accountProfile(user),
+  });
+}
 
-// In-memory store fallback when MongoDB is not connected in early local dev
-const devMockUsers = new Map();
+export function authUnavailable(res) {
+  return res.status(503).json({
+    success: false,
+    message: 'PickTurf is temporarily unavailable. Please try again in a moment.',
+  });
+}
 
-/**
- * @route   POST /api/auth/google
- * @desc    Google OAuth Sign-up / Login
- * @access  Public
- */
-export const googleAuth = async (req, res) => {
+export async function googleAuth(req, res, next) {
+  const { credential, role, isSignUp } = req.body ?? {};
+  if (typeof credential !== 'string' || !credential.trim()) {
+    return res.status(400).json({ success: false, message: 'Google credential token is required' });
+  }
+  if (typeof isSignUp !== 'boolean' || (isSignUp && !signupRoles.includes(role))) {
+    return res.status(400).json({ success: false, message: 'Please select a valid account type when signing up.' });
+  }
+
+  const audience = process.env.GOOGLE_CLIENT_ID?.trim();
+  if (!audience) return authUnavailable(res);
+
+  let payload;
   try {
-    const { credential, role, isSignUp } = req.body;
+    const ticket = await googleClient.verifyIdToken({ idToken: credential, audience });
+    payload = ticket.getPayload();
+  } catch {
+    return res.status(401).json({ success: false, message: 'Invalid Google credential. Please try signing in with Google again.' });
+  }
 
-    if (!credential) {
-      return res.status(400).json({ success: false, message: 'Google credential token is required' });
-    }
+  const { sub: googleId, email, email_verified: verified, name, picture } = payload ?? {};
+  if (typeof googleId !== 'string' || !googleId.trim()
+    || typeof email !== 'string' || !email.trim() || verified !== true) {
+    return res.status(401).json({ success: false, message: 'A verified Google email and account are required.' });
+  }
 
-    let payload;
-    try {
-      const ticket = await client.verifyIdToken({
-        idToken: credential,
-        audience: process.env.GOOGLE_CLIENT_ID,
-      });
-      payload = ticket.getPayload();
-    } catch (err) {
-      // If token decoding as JWT payload for dev fallback
-      const base64Url = credential.split('.')[1];
-      if (base64Url) {
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = decodeURIComponent(
-          Buffer.from(base64, 'base64')
-            .toString('utf-8')
-            .split('')
-            .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-            .join('')
-        );
-        payload = JSON.parse(jsonPayload);
-      } else {
-        return res.status(401).json({ success: false, message: 'Invalid Google credential token' });
+  const normalizedEmail = email.trim().toLowerCase();
+  try {
+    let user = await User.findOne({ email: normalizedEmail });
+    if (!user) {
+      if (!isSignUp) {
+        return res.status(404).json({ success: false, message: 'No account found with this email. Please sign up first.' });
       }
-    }
 
-    const { sub: googleId, email, name, picture } = payload;
-    const normalizedEmail = email.toLowerCase();
-
-    // Check database if connected
-    let user = null;
-    const isDbConnected = User.db?.readyState === 1;
-
-    if (isDbConnected) {
-      user = await User.findOne({ email: normalizedEmail });
-    } else {
-      user = devMockUsers.get(normalizedEmail) || null;
-    }
-
-    // SCENARIO 1: Existing User
-    if (user) {
-      // If trying to register with a conflicting role
-      if (isSignUp && role && user.role !== role) {
-        const roleLabel = user.role === 'owner' ? 'Turf Owner (Business Account)' : 'Customer (User Account)';
-        return res.status(400).json({
-          success: false,
-          message: `This Google account is already registered as a ${roleLabel}. One Gmail account can hold only one role. Please log in instead.`,
+      try {
+        user = await User.create({
+          name: name?.trim() || normalizedEmail.split('@')[0],
+          email: normalizedEmail,
+          googleId,
+          avatar: picture || '',
+          role,
         });
+        return sendSession(res, user, 201);
+      } catch (error) {
+        if (error.code !== 11000) throw error;
+        user = await User.findOne({ email: normalizedEmail });
+        if (!user) throw error;
       }
-
-      // Successful login
-      const token = generateToken(user._id || user.id, user.role);
-      return res.status(200).json({
-        success: true,
-        message: 'Login successful',
-        token,
-        user: {
-          id: user._id || user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          avatar: user.avatar,
-          walletBalance: user.walletBalance || 0,
-        },
-      });
     }
 
-    // SCENARIO 2: New User
-    if (!isSignUp) {
-      return res.status(404).json({
-        success: false,
-        message: 'No account found with this email. Please sign up to choose your account type.',
-      });
+    if (!user.isActive) {
+      return res.status(403).json({ success: false, message: 'This PickTurf account is inactive.' });
     }
-
-    // Validate permitted sign-up roles (Staff cannot publicly register)
-    if (!role || !['customer', 'owner'].includes(role)) {
+    if (user.googleId && user.googleId !== googleId) {
+      return res.status(401).json({ success: false, message: 'This Google account does not match the PickTurf account.' });
+    }
+    if (isSignUp && user.role !== role) {
       return res.status(400).json({
         success: false,
-        message: 'Please select a valid account type: Customer (User) or Turf Owner (Business).',
+        message: 'This email already has a different PickTurf role. Please log in instead.',
       });
     }
-
-    let newUser;
-    if (isDbConnected) {
-      newUser = await User.create({
-        name,
-        email: normalizedEmail,
-        googleId,
-        avatar: picture || '',
-        role,
-        walletBalance: 0,
-      });
-    } else {
-      newUser = {
-        id: 'mock_' + Date.now(),
-        name,
-        email: normalizedEmail,
-        googleId,
-        avatar: picture || '',
-        role,
-        walletBalance: 0,
-      };
-      devMockUsers.set(normalizedEmail, newUser);
-    }
-
-    const token = generateToken(newUser._id || newUser.id, newUser.role);
-    return res.status(201).json({
-      success: true,
-      message: 'Account created successfully',
-      token,
-      user: {
-        id: newUser._id || newUser.id,
-        name: newUser.name,
-        email: newUser.email,
-        role: newUser.role,
-        avatar: newUser.avatar,
-        walletBalance: newUser.walletBalance,
-      },
-    });
+    return sendSession(res, user, 200);
   } catch (error) {
-    console.error('[Google Auth Error]:', error);
-    return res.status(500).json({ success: false, message: error.message || 'Server authentication error' });
+    if (isDatabaseUnavailable(error)) return authUnavailable(res);
+    return next(error);
   }
-};
+}
 
-/**
- * @route   POST /api/auth/dev-login
- * @desc    Quick Developer Login for local testing without Google Client ID
- * @access  Public (Dev mode only)
- */
-export const devLogin = async (req, res) => {
-  try {
-    const { name, email, role, isSignUp } = req.body;
-    if (!email || !role) {
-      return res.status(400).json({ success: false, message: 'Email and role are required' });
-    }
-
-    const normalizedEmail = email.toLowerCase();
-    const isDbConnected = User.db?.readyState === 1;
-
-    let user = isDbConnected
-      ? await User.findOne({ email: normalizedEmail })
-      : devMockUsers.get(normalizedEmail);
-
-    if (user) {
-      if (isSignUp && user.role !== role) {
-        return res.status(400).json({
-          success: false,
-          message: `This email is already registered as '${user.role}'. One email holds only one role.`,
-        });
-      }
-      const token = generateToken(user._id || user.id, user.role);
-      return res.json({
-        success: true,
-        token,
-        user: {
-          id: user._id || user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          avatar: user.avatar,
-          walletBalance: user.walletBalance || 0,
-        },
-      });
-    }
-
-    // New user
-    if (!isSignUp) {
-      return res.status(404).json({ success: false, message: 'Account not found. Please sign up first.' });
-    }
-
-    const userData = {
-      name: name || email.split('@')[0],
-      email: normalizedEmail,
-      role,
-      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(email)}`,
-      walletBalance: 0,
-    };
-
-    let createdUser;
-    if (isDbConnected) {
-      createdUser = await User.create(userData);
-    } else {
-      createdUser = { id: 'dev_' + Date.now(), ...userData };
-      devMockUsers.set(normalizedEmail, createdUser);
-    }
-
-    const token = generateToken(createdUser._id || createdUser.id, createdUser.role);
-    return res.status(201).json({
-      success: true,
-      token,
-      user: createdUser,
-    });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-/**
- * @route   GET /api/auth/me
- * @desc    Get logged in user profile
- * @access  Private
- */
-export const getMe = async (req, res) => {
-  res.status(200).json({
-    success: true,
-    user: req.user,
-  });
-};
+export function getMe(req, res) {
+  return res.json({ success: true, user: accountProfile(req.user) });
+}
