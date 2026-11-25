@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiBase, authPageHref, requestAuth, serviceUnavailableMessage } from '../auth';
+import AppLink from './AppLink';
 import RoleSelector from './RoleSelector';
 
 const clientId = import.meta.env.GOOGLE_CLIENT_ID.trim();
@@ -7,18 +8,19 @@ const googleConfigured = Boolean(apiBase && clientId);
 let initializedIdentity;
 let activeCredentialHandler;
 
-export default function AuthPanel({ mode, returnPath, onAuthSuccess }) {
+export default function AuthPanel({ mode, returnPath, navigate, onAuthSuccess }) {
   const [role, setRole] = useState('customer');
   const [error, setError] = useState(null);
   const [pending, setPending] = useState(false);
   const [googleUnavailable, setGoogleUnavailable] = useState(false);
   const googleTarget = useRef(null);
-  const submitting = useRef(false);
+  const request = useRef(null);
   const isSignUp = mode === 'signup';
 
   const authenticate = useCallback(async (fields) => {
-    if (submitting.current) return;
-    submitting.current = true;
+    if (request.current) return;
+    const controller = new AbortController();
+    request.current = controller;
     setError(null);
     setPending(true);
 
@@ -27,20 +29,24 @@ export default function AuthPanel({ mode, returnPath, onAuthSuccess }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...fields, isSignUp }),
+        signal: controller.signal,
       });
       const data = await response.json().catch(() => null);
+      if (controller.signal.aborted) return;
       if (!response.ok || !data?.token || !data.user) {
         setError({ mode, message: data?.message || 'Something went wrong. Please try again.' });
         return;
       }
       onAuthSuccess(data);
     } catch {
-      setError({ mode, message: serviceUnavailableMessage });
+      if (!controller.signal.aborted) setError({ mode, message: serviceUnavailableMessage });
     } finally {
-      submitting.current = false;
-      setPending(false);
+      if (request.current === controller) request.current = null;
+      if (!controller.signal.aborted) setPending(false);
     }
   }, [isSignUp, mode, onAuthSuccess]);
+
+  useEffect(() => () => request.current?.abort(), []);
 
   useEffect(() => {
     function handleCredential({ credential }) {
@@ -109,10 +115,6 @@ export default function AuthPanel({ mode, returnPath, onAuthSuccess }) {
 
   return (
     <>
-      <nav className="mode-picker" aria-label="Account action">
-        <a href={authPageHref('signup', returnPath)} aria-current={isSignUp ? 'page' : undefined}>Sign up</a>
-        <a href={authPageHref('login', returnPath)} aria-current={!isSignUp ? 'page' : undefined}>Log in</a>
-      </nav>
       <h2>{isSignUp ? 'Get in the game.' : 'Welcome back.'}</h2>
       <p className="account-intro">
         {isSignUp ? 'Create your PickTurf account to get started.' : 'Log in with the Google account you used to join.'}
@@ -128,6 +130,10 @@ export default function AuthPanel({ mode, returnPath, onAuthSuccess }) {
         )}
       </div>
       {pending && <p className="account-note" role="status">Connecting to PickTurf…</p>}
+      <nav className="mode-picker" aria-label="Account action">
+        <AppLink href={authPageHref('signup', returnPath)} navigate={navigate} aria-current={isSignUp ? 'page' : undefined}>Sign up</AppLink>
+        <AppLink href={authPageHref('login', returnPath)} navigate={navigate} aria-current={!isSignUp ? 'page' : undefined}>Log in</AppLink>
+      </nav>
       {!isSignUp && <p className="account-note">Turf staff can log in with the email their manager registered.</p>}
     </>
   );

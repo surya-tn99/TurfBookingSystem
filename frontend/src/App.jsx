@@ -1,8 +1,11 @@
 ﻿import { useCallback, useEffect, useState } from 'react';
+import AppLink from './components/AppLink';
 import AuthPanel from './components/AuthModal';
 import Home from './components/Home';
+import UserMenu from './components/UserMenu';
 import pitch from './assets/pick-turf-pitch.webp';
 import { apiBase, authPageHref, loginReturnPath, requestAuth, serviceUnavailableMessage } from './auth';
+import { useNavigation } from './navigation';
 
 const roleNames = { customer: 'Player', owner: 'Turf owner', staff: 'Turf staff' };
 
@@ -23,11 +26,10 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [sessionStatus, setSessionStatus] = useState(() => savedToken() ? 'checking' : 'guest');
   const [sessionCheck, setSessionCheck] = useState(0);
-  const [hash, setHash] = useState(() => window.location.hash);
-  const path = window.location.pathname.replace(/\/$/, '') || '/';
+  const { route: { pathname, search, hash }, navigate } = useNavigation();
+  const path = pathname.replace(/\/$/, '') || '/';
   const mode = path === '/login' || path === '/signup' ? path.slice(1) : null;
   const isHome = path === '/' && !hash;
-  const search = window.location.search;
   const returnPath = mode ? loginReturnPath(new URLSearchParams(search).get('returnTo'))
     : isHome ? '/' + search : '/';
 
@@ -90,14 +92,6 @@ export default function App() {
   }, [sessionCheck]);
 
   useEffect(() => {
-    function updateHash() {
-      setHash(window.location.hash);
-    }
-    window.addEventListener('hashchange', updateHash);
-    return () => window.removeEventListener('hashchange', updateHash);
-  }, []);
-
-  useEffect(() => {
     const title = isHome ? 'Find your next game' : mode === 'login' ? 'Log in' : mode === 'signup' ? 'Sign up' : 'Page not found';
     document.title = `${title} | PickTurf`;
   }, [isHome, mode]);
@@ -106,39 +100,37 @@ export default function App() {
     localStorage.setItem('turf_token', token);
     setUser(nextUser);
     setSessionStatus('verified');
-    if (mode === 'login') window.location.replace(returnPath);
-  }, [mode, returnPath]);
+    if (mode === 'login') navigate(returnPath, { replace: true });
+  }, [mode, navigate, returnPath]);
 
   function signOut() {
     clearSavedSession();
     setUser(null);
-    window.location.assign('/login');
+    setSessionStatus('guest');
+    navigate('/login');
   }
 
   return (
     <>
-      <header className="site-header">
+      {!mode && <header className="site-header">
         <div className="frame header-inner">
-          <a className="brand" href="/" aria-label="PickTurf home">
+          <AppLink className="brand" href="/" navigate={navigate} aria-label="PickTurf home">
             Pick<span>Turf</span>
-          </a>
+          </AppLink>
           <nav className="header-actions" aria-label="Account">
             {user ? (
-              <details className="user-menu">
-                <summary>{user.name}</summary>
-                <button className="button button-outline" type="button" onClick={signOut}>Log out</button>
-              </details>
+              <UserMenu name={user.name} onLogout={signOut} />
             ) : sessionStatus === 'checking' ? (
               <span className="account-note" role="status">Checking session…</span>
             ) : (
               <>
-                <a className="button button-plain" href={authPageHref('login', returnPath)}>Log in</a>
-                <a className="button button-primary" href={authPageHref('signup', returnPath)}>Sign up</a>
+                <AppLink className="button button-plain" href={authPageHref('login', returnPath)} navigate={navigate}>Log in</AppLink>
+                <AppLink className="button button-primary" href={authPageHref('signup', returnPath)} navigate={navigate}>Sign up</AppLink>
               </>
             )}
           </nav>
         </div>
-      </header>
+      </header>}
 
       {sessionStatus === 'unavailable' && (
         <div className="frame auth-error session-notice">
@@ -157,6 +149,9 @@ export default function App() {
         </section>
 
         <section className="account-card" aria-label="Your PickTurf account">
+          <AppLink className="brand account-brand" href="/" navigate={navigate} aria-label="PickTurf home">
+            Pick<span>Turf</span>
+          </AppLink>
           {user ? (
             <div className="account-summary">
               <span className="account-role">{roleNames[user.role] ?? 'Member'}</span>
@@ -166,14 +161,15 @@ export default function App() {
           ) : sessionStatus === 'checking' ? (
             <p className="account-note">Checking your PickTurf session…</p>
           ) : (
-            <AuthPanel mode={mode} returnPath={returnPath} onAuthSuccess={handleAuthSuccess} />
+            <AuthPanel key={mode + search} mode={mode} returnPath={returnPath} navigate={navigate} onAuthSuccess={handleAuthSuccess} />
           )}
+          <AppLink className="button button-outline auth-home-link" href="/" navigate={navigate}>Back to home</AppLink>
         </section>
-      </main> : isHome ? <Home /> : (
+      </main> : isHome ? <Home search={search} navigate={navigate} /> : (
         <main className="frame not-found">
           <h1>Page not found</h1>
           <p>The page you’re looking for may have moved or the link may be incorrect.</p>
-          <a className="button button-primary" href="/">Back to home</a>
+          <AppLink className="button button-primary" href="/" navigate={navigate}>Back to home</AppLink>
         </main>
       )}
 

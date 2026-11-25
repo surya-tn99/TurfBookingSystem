@@ -10,8 +10,8 @@ const venues = [
   { name: 'Court Social', area: 'Indiranagar', city: 'Bengaluru', sports: [sports[2], sports[3]], image: pitch },
 ];
 
-export default function Home() {
-  const params = new URLSearchParams(window.location.search);
+export default function Home({ search, navigate }) {
+  const params = new URLSearchParams(search);
   const searched = params.has('location') || params.has('sport');
   const location = params.get('location')?.trim() || '';
   const sport = params.get('sport') || '';
@@ -26,6 +26,12 @@ export default function Home() {
       && (!selectedSport || venue.sports.includes(selectedSport));
   }) : venues;
 
+  function searchTurfs(event) {
+    event.preventDefault();
+    const filters = new URLSearchParams(new FormData(event.currentTarget));
+    navigate(`/?${filters}`);
+  }
+
   return (
     <main className="frame home">
       <section className="pitch home-pitch" aria-labelledby="home-title">
@@ -36,7 +42,7 @@ export default function Home() {
         </div>
       </section>
 
-      <form className="turf-search" aria-label="Find a turf" action="/" method="get">
+      <form key={search} className="turf-search" aria-label="Find a turf" action="/" method="get" onSubmit={searchTurfs}>
         <label>Location <input name="location" placeholder="City or neighborhood" defaultValue={location} /></label>
         <label>Sport
           <select name="sport" defaultValue={selectedSport}>
