@@ -1,2 +1,25 @@
 *.plan
+
+# Dependencies
+node_modules/
+
+# Environment variables
 .env
+.env.*
+!.env.example
+
+# Build files
+dist/
+build/
+
+# Logs
+*.log
+
+# Testing
+coverage/
+playwright-report/
+test-results/
+
+# OS files
+.DS_Store
+Thumbs.db
