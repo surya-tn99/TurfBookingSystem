@@ -400,8 +400,8 @@ a.button { display: inline-flex; align-items: center; text-decoration: none; }
 .slot-remove { display: inline-flex; align-items: center; gap: 5px; justify-content: center; }
 .slot-row-actions { grid-column: 1 / -1; flex-wrap: nowrap; justify-content: space-between; }
 .slot-row-status { grid-column: 1 / -1; }
-.slot-config-row { padding: 12px 10px; border-radius: 10px; }
-.slot-config-inactive { background: #f7f0e5; border-color: #dfc9ab; }
+.slot-config-row, .staff-row { padding: 12px 10px; border-radius: 10px; }
+.slot-config-inactive, .staff-row-inactive { background: #f7f0e5; border-color: #dfc9ab; }
 .slot-state {
   justify-self: start;
   padding: 3px 9px;
@@ -477,7 +477,6 @@ a.button { display: inline-flex; align-items: center; text-decoration: none; }
 
   .home, .main-layout, .owner-page { padding-block: 16px 28px; }
   .main-layout { grid-template-columns: minmax(0, 1fr); }
-  .main-layout .account-card { grid-row: 1; }
   .main-layout .pitch { min-height: 190px; }
   .pitch { border-radius: 18px; padding: 20px; }
   .pitch h1 { font-size: clamp(2.35rem, 8.8vw, 3.7rem); line-height: .98; }
@@ -499,6 +498,7 @@ a.button { display: inline-flex; align-items: center; text-decoration: none; }
   .profile-actions .button { flex: 1; }
 
   .owner-page { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .owner-dashboard-welcome { display: none; }
   .owner-page h1 { font-size: clamp(1.8rem, 7.6vw, 2.65rem); }
   .owner-panel { padding: 15px; border-radius: 16px; overflow-wrap: anywhere; }
   .owner-form, .owner-form-fields, .owner-form .owner-panel { gap: 13px; }

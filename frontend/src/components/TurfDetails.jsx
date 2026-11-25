@@ -58,7 +58,7 @@ function Staff({ id }) {
     {error && <p className="auth-error" role="alert">{error}</p>}
     {staff === null && !error && <Skeleton label="Loading turf staff…" />}
     {staff?.length === 0 && <p>No staff members yet.</p>}
-    {staff?.map((member) => <div className="owner-heading owner-edit-row" key={member._id}>
+    {staff?.map((member) => <div className={`owner-heading owner-edit-row staff-row${member.isActive ? '' : ' staff-row-inactive'}`} key={member._id}>
       <div className="staff-details"><strong><NameTooltip text={member.name} /></strong><p>{member.email} · {member.phone}</p><p>{member.isActive ? 'Active' : 'Inactive'}</p></div>
       {pendingRemoval === member._id ? (
         <div className="owner-actions">

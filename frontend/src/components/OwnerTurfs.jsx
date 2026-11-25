@@ -26,7 +26,7 @@ export function OwnerDashboard({ user, navigate }) {
 
   return (
     <main className="frame owner-page">
-      <div className="owner-heading"><h1><NameTooltip text={`Welcome, ${user.name}.`} fullName={user.name} /></h1></div>
+      <div className="owner-heading owner-dashboard-welcome"><h1><NameTooltip text={`Welcome, ${user.name}.`} fullName={user.name} /></h1></div>
       <div className="owner-heading">
         <h2>My turfs</h2>
         <AppLink className="button button-primary" href={managerPath + '/turfs/new'} navigate={navigate}>Add turf</AppLink>
