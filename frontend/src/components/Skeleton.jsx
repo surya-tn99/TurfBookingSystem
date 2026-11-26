@@ -10,6 +10,18 @@ export default function Skeleton({ label, variant = 'panel' }) {
             <div className="skeleton-short skeleton-block" />
           </div>)}
         </div>
+      ) : variant === 'venues' ? (
+        <div className="venue-grid" aria-hidden="true">
+          {[0, 1, 2, 3].map((index) => <div className="venue" key={index}>
+            <div className="venue-image skeleton-block" />
+            <div className="venue-details skeleton-layout">
+              <div className="skeleton-title skeleton-block" />
+              <div className="skeleton-line skeleton-block" />
+              <div className="skeleton-short skeleton-block" />
+              <div className="skeleton-short skeleton-block" />
+            </div>
+          </div>)}
+        </div>
       ) : variant === 'account' ? (
         <span className="skeleton-account skeleton-block" aria-hidden="true" />
       ) : (

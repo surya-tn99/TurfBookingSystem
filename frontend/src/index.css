@@ -273,8 +273,10 @@ a.button { display: inline-flex; align-items: center; text-decoration: none; }
   transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
 }
 .venue-image { aspect-ratio: 16 / 10; overflow: hidden; border-radius: 15px 15px 0 0; background: var(--green); }
+.venue-link { display: block; height: 100%; border-radius: inherit; color: inherit; text-decoration: none; }
 .venue-image img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform .25s ease; }
-.venue-details { padding: 18px; }
+.venue-details { padding: 18px; overflow-wrap: anywhere; }
+.venue-details.skeleton-layout { gap: 8px; }
 @media (hover: hover) {
   .venue:hover { transform: translateY(-4px); border-color: #a8bcb0; box-shadow: 0 12px 22px #15261d1a; }
   .venue:hover img { transform: scale(1.04); }
@@ -284,8 +286,46 @@ a.button { display: inline-flex; align-items: center; text-decoration: none; }
 }
 .home h3 { margin: 0 0 5px; }
 .venue p { color: var(--muted); }
-.venue ul { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 14px 0 0; list-style: none; }
-.venue li { background: #edf5eb; color: var(--green); border-radius: 50px; padding: 3px 9px; font-size: .875rem; }
+.venue .venue-rating { margin-top: 8px; font-weight: 700; }
+.venue-rating span { color: #956400; }
+.booking-page { max-width: 880px; }
+.booking-panel { display: grid; min-width: 0; gap: 14px; }
+.booking-dates { display: grid; gap: 10px; min-width: 0; }
+.booking-date-heading, .booking-step-summary { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.booking-date-controls { display: flex; gap: 6px; }
+.booking-date-controls .button { min-width: 38px; padding: 2px 8px; font-size: 1.3rem; line-height: 1.4; }
+.booking-date-controls .button:disabled { cursor: default; }
+.booking-date-row { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(56px, 1fr); gap: 7px; overflow-x: auto; scrollbar-width: thin; padding-bottom: 3px; }
+.booking-date-button { display: grid; justify-items: center; gap: 2px; padding: 7px 4px; border: 1px solid var(--line); border-radius: 9px; color: var(--muted); background: white; font: inherit; font-size: .8rem; }
+.booking-date-button strong { color: var(--green); font-size: 1.2rem; line-height: 1.1; }
+.booking-date-button:hover, .booking-date-button[aria-pressed="true"] { border-color: var(--green); background: #edf5eb; }
+.booking-date-button:focus-visible { outline-offset: -3px; }
+.booking-panel legend { margin-bottom: 10px; font-weight: 700; }
+.booking-panel legend .account-note { margin-left: 4px; }
+.booking-slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 145px), 1fr)); gap: 8px; }
+.booking-payment-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 8px; }
+.booking-slot { display: flex; align-items: start; gap: 8px; padding: 11px; border: 1px solid var(--line); border-radius: 9px; }
+.booking-slot:has(input:checked) { border-color: var(--green); background: #edf5eb; }
+.booking-slot:has(input:disabled) { background: #f4f5f3; color: var(--muted); }
+.booking-slot input { width: auto; margin: 4px 0 0; accent-color: var(--green); }
+.booking-slot small { display: block; }
+.booking-checkout { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 14px; }
+.venue-facilities { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px; margin: 0; }
+.venue-facilities dt { font-weight: 700; }
+.venue-facilities dd { margin: 2px 0 0; color: var(--muted); }
+.booking-rental { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; }
+.booking-rental small { display: block; color: var(--muted); }
+.booking-rental input { width: 80px; }
+.booking-rental-summary { display: grid; gap: 7px; padding: 0; margin: 0; list-style: none; }
+.booking-rental-summary li { display: flex; justify-content: space-between; gap: 8px; }
+.feedback-prompt { max-width: 880px; margin-top: 18px; overflow-wrap: anywhere; }
+.feedback-prompt h2 { margin-bottom: 5px; }
+.feedback-prompt form { margin-top: 14px; }
+.feedback-prompt textarea { display: block; width: 100%; margin-top: 4px; }
+.feedback-ratings { display: flex; flex-wrap: wrap; gap: 8px; }
+.feedback-ratings label { display: flex; align-items: center; gap: 5px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; }
+.feedback-ratings label:has(input:checked) { border-color: var(--green); background: #edf5eb; }
+.feedback-ratings input { width: auto; margin: 0; accent-color: var(--green); }
 @media (max-width: 850px) {
   .turf-search, .venue-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -412,6 +452,10 @@ a.button { display: inline-flex; align-items: center; text-decoration: none; }
   font-weight: 800;
 }
 .slot-config-inactive .slot-state { background: #f0dfc5; color: #654523; }
+@media (min-width: 1024px) {
+  .slot-config-row { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; }
+  .slot-config-row .slot-row-actions { grid-area: 1 / 4; justify-content: flex-end; }
+}
 .slot-trash { color: #b42318; width: 18px; height: 18px; flex: none; }
 .owner-turf-grid { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 16px; }
 .owner-turf-grid .owner-turf { position: relative; flex: 0 0 calc((100% - 32px) / 3); min-width: 0; text-decoration: none; align-content: start; }

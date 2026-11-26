@@ -34,9 +34,8 @@ const turfSchema = new Schema({
   },
   regulations: [String],
   policies: {
+    payAtVenue: Boolean,
     cancellation: { available: Boolean, cutoffHours: Number },
-    rescheduling: { available: Boolean, cutoffHours: Number, maxChanges: Number },
-    freeRescheduleHours: Number,
     rainPolicy: String,
     cancellationNote: String,
   },

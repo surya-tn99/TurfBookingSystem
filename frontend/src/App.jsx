@@ -1,16 +1,18 @@
 ﻿import { useCallback, useEffect, useState } from 'react';
 import AppLink from './components/AppLink';
 import AuthPanel from './components/AuthModal';
+import BookingFeedback from './components/BookingFeedback';
 import Home from './components/Home';
 import NameTooltip from './components/NameTooltip';
 import { OwnerDashboard, TurfRegistration } from './components/OwnerTurfs';
 import ProfileSetup from './components/ProfileSetup';
 import Skeleton from './components/Skeleton';
+import TurfBooking from './components/TurfBooking';
 import TurfSetup from './components/TurfSetup';
 import TurfDetails from './components/TurfDetails';
 import UserMenu from './components/UserMenu';
 import pitch from './assets/pick-turf-pitch.webp';
-import { apiBase, authPageHref, loginReturnPath, requestAuth, serviceUnavailableMessage } from './auth';
+import { apiBase, authPageHref, loginReturnPath, publicTurfRoute, requestAuth, serviceUnavailableMessage } from './auth';
 import { useNavigation } from './navigation';
 import { managerPath } from './ownerApi';
 
@@ -42,16 +44,22 @@ export default function App() {
   const mode = path === '/login' || path === '/signup' ? path.slice(1) : null;
   const isHome = path === '/' && !hash;
   const isProfile = path === '/complete-profile';
+  const publicTurf = publicTurfRoute.exec(path);
   const turfMatch = /^\/turfManeger\/turfs\/([a-fA-F0-9]{24})(\/setup)?$/.exec(path);
   const isDashboard = path === managerPath;
   const isRegistration = path === managerPath + '/turfs/new';
   const isOwner = isDashboard || isRegistration || Boolean(turfMatch);
   const isProtected = isProfile || isOwner;
-  const returnPath = mode ? loginReturnPath(new URLSearchParams(search).get('returnTo'))
-    : isHome ? '/' + search : '/';
+  const params = new URLSearchParams(search);
+  const showBookingFeedback = isHome || Boolean(publicTurf && params.has('booking'));
+  const turfParams = new URLSearchParams([...params].filter(([name]) => ['date', 'slot', 'step', 'booking', 'rental'].includes(name)));
+  const returnPath = mode || isProfile ? loginReturnPath(params.get('returnTo'))
+    : publicTurf ? path + (turfParams.size ? `?${turfParams}` : '') : isHome ? '/' + search : '/';
+  const profilePath = returnPath === '/' ? '/complete-profile'
+    : `/complete-profile?${new URLSearchParams({ returnTo: returnPath })}`;
   let redirectTo;
-  if (user?.needsProfile && !isProfile) redirectTo = '/complete-profile';
-  else if (isProfile && user && !user.needsProfile) redirectTo = landingPageFor(user);
+  if (user?.needsProfile && !isProfile) redirectTo = profilePath;
+  else if (isProfile && user && !user.needsProfile) redirectTo = user.role === 'customer' ? returnPath : landingPageFor(user);
   else if (isProtected && sessionStatus === 'guest') redirectTo = '/login';
   else if (isOwner && user && user.role !== 'owner') redirectTo = '/';
 
@@ -115,7 +123,8 @@ export default function App() {
 
   useEffect(() => {
     const titles = { login: 'Log in', signup: 'Sign up', '/complete-profile': 'Complete your profile', [managerPath]: 'Dashboard' };
-    const title = isHome ? 'Find your next game' : titles[mode || path] || (isOwner ? 'Manage turfs' : 'Page not found');
+    const title = isHome ? 'Find your next game' : publicTurfRoute.test(path) ? 'Book a turf'
+      : titles[mode || path] || (isOwner ? 'Manage turfs' : 'Page not found');
     document.title = `${title} | PickTurf`;
   }, [isHome, isOwner, mode, path]);
 
@@ -128,13 +137,13 @@ export default function App() {
     localStorage.setItem('turf_token', token);
     setUser(nextUser);
     setSessionStatus('verified');
-    if (nextUser.needsProfile) navigate('/complete-profile', { replace: true });
-    else if (mode === 'login') navigate(nextUser.role === 'owner' ? managerPath : returnPath, { replace: true });
-  }, [mode, navigate, returnPath]);
+    if (nextUser.needsProfile) navigate(profilePath, { replace: true });
+    else navigate(nextUser.role === 'owner' ? managerPath : returnPath, { replace: true });
+  }, [navigate, profilePath, returnPath]);
 
   function finishProfile(nextUser) {
     setUser(nextUser);
-    navigate(landingPageFor(nextUser), { replace: true });
+    navigate(nextUser.role === 'customer' ? returnPath : landingPageFor(nextUser), { replace: true });
   }
 
   function signOut() {
@@ -175,6 +184,10 @@ export default function App() {
         </div>
       )}
 
+      {user?.role === 'customer' && !user.needsProfile && (
+        <BookingFeedback key={`feedback:${user.id}`} token={savedToken()} visible={showBookingFeedback} />
+      )}
+
       {redirectTo || (isProtected && !user) ? (
         <main className="frame profile-layout">
           {sessionStatus !== 'unavailable' && <Skeleton label="Checking your PickTurf session…" />}
@@ -189,6 +202,9 @@ export default function App() {
         <TurfDetails key={turfMatch[1]} id={turfMatch[1]} ownerEmail={user.email} navigate={navigate} />
       ) : isOwner ? (
         <OwnerDashboard user={user} navigate={navigate} />
+      ) : publicTurf ? (
+        <TurfBooking key={`booking:${publicTurf[1]}`} id={publicTurf[1]} params={params} navigate={navigate}
+          user={user} token={savedToken()} sessionStatus={sessionStatus} />
       ) : mode ? <main className="frame main-layout">
         <section className="pitch" aria-labelledby="pitch-title">
           <img src={pitch} alt="" fetchPriority="high" />

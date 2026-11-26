@@ -1,5 +1,12 @@
 export const apiBase = import.meta.env.API_BASE_URL.trim().replace(/\/+$/, '');
 export const serviceUnavailableMessage = 'PickTurf is temporarily unavailable. Please try again in a moment.';
+export const publicTurfRoute = /^\/turfs\/([a-f0-9]{24})$/i;
+
+export function publicTurfPath(id) {
+  if (typeof id !== 'string') return null;
+  const path = `/turfs/${id.toLowerCase()}`;
+  return publicTurfRoute.test(path) ? path : null;
+}
 
 export async function requestAuth(path, { signal, ...options } = {}) {
   const timeout = AbortSignal.timeout(15_000);
@@ -12,8 +19,8 @@ export async function requestAuth(path, { signal, ...options } = {}) {
 }
 
 export function loginReturnPath(value) {
-  // The homepage is the only public destination outside the auth flow today.
-  return value?.startsWith('/?') && !value.includes('#') ? value : '/';
+  if (!value || /[\\#]/.test(value)) return '/';
+  return value.startsWith('/?') || publicTurfRoute.test(value.split('?')[0]) ? value : '/';
 }
 
 export function authPageHref(mode, returnPath) {

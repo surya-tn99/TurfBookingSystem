@@ -3,6 +3,8 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import { connectDB } from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
+import publicTurfRoutes from './routes/publicTurfRoutes.js';
+import { razorpayWebhook } from './routes/razorpayWebhook.js';
 import turfRoutes from './routes/turfRoutes.js';
 import { checkSupabaseConnection } from './services/storageService.js';
 
@@ -11,6 +13,7 @@ dotenv.config();
 const app = express();
 
 // Middlewares
+app.post('/api/payments/razorpay/webhook', express.raw({ type: 'application/json' }), razorpayWebhook);
 app.use(express.json());
 app.use(
   cors({
@@ -29,6 +32,7 @@ checkSupabaseConnection();
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/turfs', publicTurfRoutes);
 app.use('/api/owner/turfs', turfRoutes);
 
 // Root Health Check

@@ -14,8 +14,16 @@ const sportSuggestions = {
 };
 const equipmentSuggestions = ['Football', 'Cricket Bat & Ball', 'Badminton Racket', 'Pickleball Paddle', 'Training Bibs', 'Cones'];
 const ruleSuggestions = ['No metal spikes', 'Arrive 10 minutes before your slot', 'No smoking or alcohol on premises'];
-const blankSlot = { startTime: '06:00', endTime: '07:00', price: 0, isActive: true };
 const blankEquipment = { name: '', price: 0, maxCount: 1, isAvailable: true };
+const minutesPerDay = 24 * 60;
+const maxSlots = 96;
+
+function validDuration(duration) {
+  return Number.isInteger(duration) && duration >= 1 && duration <= minutesPerDay;
+}
+
+const durationError = 'Enter a slot duration from 1 to 1,440 whole minutes.';
+const slotTimeError = 'Enter an opening time that lets the slot finish by 24:00.';
 
 function TrashIcon() {
   return (
@@ -28,7 +36,7 @@ function TrashIcon() {
 function Field({ label, value, update, type = 'text', options, ...props }) {
   if (options) return <Dropdown label={label} options={options} value={String(value ?? options[0])} onChange={update} />;
   return <label>{label}
-    <input {...props} type={type} value={value ?? ''} onChange={(event) => update(type === 'number' ? event.target.valueAsNumber || 0 : event.target.value)} />
+    <input {...props} type={type} value={value ?? ''} onChange={update && ((event) => update(type === 'number' ? event.target.valueAsNumber || 0 : event.target.value))} />
   </label>;
 }
 
@@ -36,7 +44,7 @@ function Toggle({ label, value, update }) {
   return <label className="owner-agreement"><input type="checkbox" checked={Boolean(value)} onChange={(event) => update(event.target.checked)} />{label}</label>;
 }
 
-function BookingPolicyFields({ label, value, onChange, children }) {
+function BookingPolicyFields({ label, value, onChange }) {
   return <div>
     <Toggle label={label + ' available'} value={value?.available} update={(available) => onChange({ ...value, available })} />
     {value?.available && <>
@@ -45,7 +53,6 @@ function BookingPolicyFields({ label, value, onChange, children }) {
         <input type="number" min="0" step="any" required value={value.cutoffHours ?? ''}
           onChange={(event) => onChange({ ...value, cutoffHours: event.target.value === '' ? null : event.target.valueAsNumber })} />
       </label>
-      {children}
     </>}
   </div>;
 }
@@ -81,6 +88,11 @@ function clock(value) {
   return [Math.floor(value / 60), value % 60].map((part) => String(part).padStart(2, '0')).join(':');
 }
 
+function closingTime(startTime, duration) {
+  const end = minutes(startTime) + duration;
+  return validDuration(duration) && end <= minutesPerDay ? clock(end) : '';
+}
+
 export default function TurfSetup({ id, navigate, onSaved, onMediaChange, section = 'all' }) {
   const showPricing = section !== 'facilities';
   const showFacilities = section !== 'pricing';
@@ -93,7 +105,7 @@ export default function TurfSetup({ id, navigate, onSaved, onMediaChange, sectio
   const [suggestions, setSuggestions] = useState({});
   const [showSlotBuilder, setShowSlotBuilder] = useState(false);
   const [pendingSlotRemoval, setPendingSlotRemoval] = useState(null);
-  const [builder, setBuilder] = useState({ open: '06:00', close: '22:00', price: 0 });
+  const [builder, setBuilder] = useState({ startTime: '06:00', price: 0 });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -111,8 +123,8 @@ export default function TurfSetup({ id, navigate, onSaved, onMediaChange, sectio
   }, [id, attempt, showPricing]);
 
   const set = (key, value) => setDraft((previous) => ({ ...previous, [key]: value }));
-  const setRow = (key, index, field, value) => setDraft((previous) => ({
-    ...previous, [key]: previous[key].map((row, i) => i === index ? { ...row, [field]: value } : row),
+  const setRow = (key, index, fields) => setDraft((previous) => ({
+    ...previous, [key]: previous[key].map((row, i) => i === index ? { ...row, ...fields } : row),
   }));
   const facility = (key, value) => setDraft((previous) => ({ ...previous, facilities: { ...previous.facilities, [key]: value } }));
   const nestedFacility = (group, key, value) => setDraft((previous) => ({
@@ -138,7 +150,8 @@ export default function TurfSetup({ id, navigate, onSaved, onMediaChange, sectio
       if (path === '/media') onMediaChange?.(turf.media);
       if (replaceDraft) {
         setPendingSlotRemoval(null);
-        onSaved?.(turf);
+        if (onSaved) onSaved(turf);
+        else navigate(turfPath(id), { replace: true });
       }
       return true;
     } catch (failure) {
@@ -149,32 +162,41 @@ export default function TurfSetup({ id, navigate, onSaved, onMediaChange, sectio
     finally { setBusy(false); }
   }
 
-  function generateSlots() {
-    const start = minutes(builder.open);
-    const end = minutes(builder.close);
+  function changeDuration(duration) {
+    setError('');
+    setDraft((previous) => ({
+      ...previous,
+      slotDurationMinutes: duration,
+      timeSlots: validDuration(duration) ? previous.timeSlots.map((slot) => ({
+        ...slot, endTime: closingTime(slot.startTime, duration),
+      })) : previous.timeSlots,
+    }));
+  }
+
+  function addSlot() {
     const duration = draft.slotDurationMinutes;
-    if (!(end - start >= duration) || start < 0 || end > 1440) {
-      setError('Choose same-day opening and closing times with room for at least one slot.');
+    if (!validDuration(duration)) { setError(durationError); return; }
+    const endTime = closingTime(builder.startTime, duration);
+    if (!endTime) { setError(slotTimeError); return; }
+    if (draft.timeSlots.length >= maxSlots) {
+      setError(`A turf can have up to ${maxSlots} slots.`);
       return;
     }
     setError('');
-    const generated = [];
-    for (let time = start; time + duration <= end; time += duration) {
-      const startTime = clock(time);
-      const endTime = clock(time + duration);
-      if (!draft.timeSlots.some((slot) => slot.isActive && startTime < slot.endTime && slot.startTime < endTime)) {
-        generated.push({ ...blankSlot, startTime, endTime, price: builder.price });
-      }
-    }
-    set('timeSlots', [...draft.timeSlots, ...generated]);
-    setNotice(generated.length ? `Added ${generated.length} slots.` : 'No slots added. The existing active slots cover this window.');
+    set('timeSlots', [...draft.timeSlots, { ...builder, endTime, isActive: true }]);
   }
 
   function save(event) {
     event.preventDefault();
     const { sports, slotDurationMinutes, timeSlots, equipment, facilities, regulations, policies } = draft;
+    if (!validDuration(slotDurationMinutes)) { setError(durationError); return; }
+    if (timeSlots.some((slot) => !slot.endTime)) { setError(slotTimeError); return; }
+    const bookingPolicies = {
+      cancellation: policies?.cancellation,
+      ...(showPricing && { payAtVenue: policies?.payAtVenue === true }),
+    };
     perform('/configure', {
-      method: 'PUT', body: { sports, slotDurationMinutes, timeSlots, equipment, facilities, regulations, policies },
+      method: 'PUT', body: { sports, slotDurationMinutes, timeSlots, equipment, facilities, regulations, policies: bookingPolicies },
     }, 'Configuration saved.', true);
   }
 
@@ -204,9 +226,6 @@ export default function TurfSetup({ id, navigate, onSaved, onMediaChange, sectio
   </Wrapper>;
 
   const { facilities = {}, policies = {}, media } = draft;
-  const rescheduling = policies.rescheduling ?? (Number.isFinite(policies.freeRescheduleHours)
-    ? { available: true, cutoffHours: policies.freeRescheduleHours }
-    : undefined);
   const venueType = facilities.venueType || 'outdoor';
   return (
     <Wrapper className={wrapperClass}>
@@ -228,19 +247,23 @@ export default function TurfSetup({ id, navigate, onSaved, onMediaChange, sectio
             </div>
             <p className="account-note">This schedule repeats daily. Use 24-hour times and 24:00 for midnight.</p>
             {showSlotBuilder && <><div className="owner-fields">
-              {field('Opening time', 'open', builder, (key, value) => setBuilder({ ...builder, [key]: value }))}
-              {field('Closing time', 'close', builder, (key, value) => setBuilder({ ...builder, [key]: value }))}
-              <Field label="Duration (minutes)" options={['30', '60', '90']} value={draft.slotDurationMinutes} update={(value) => set('slotDurationMinutes', Number(value))} />
-              {field('Base price (₹)', 'price', builder, (key, value) => setBuilder({ ...builder, [key]: value }), { type: 'number', min: 0, step: '.01' })}
+              {field('Opening time', 'startTime', builder, (key, value) => setBuilder({ ...builder, [key]: value }))}
+              <label>Duration (minutes)
+                <input type="number" inputMode="numeric" min="1" max={minutesPerDay} step="1" required
+                  value={draft.slotDurationMinutes ?? ''} onChange={(event) => changeDuration(event.target.value === '' ? null : event.target.valueAsNumber)} />
+              </label>
+              <Field label="Closing time" value={closingTime(builder.startTime, draft.slotDurationMinutes)} readOnly />
+              {field('Price (₹)', 'price', builder, (key, value) => setBuilder({ ...builder, [key]: value }), { type: 'number', min: 0, step: '.01' })}
             </div>
             <div className="owner-actions">
-              <button type="button" className="button button-outline" onClick={generateSlots}>Generate fixed slots</button>
-              <button type="button" className="button button-outline" onClick={() => set('timeSlots', [...draft.timeSlots, { ...blankSlot }])}>Add slot</button>
+              <button type="button" className="button button-outline" onClick={addSlot}>Add slot</button>
             </div></>}
             {draft.timeSlots.map((slot, index) => {
-              const update = (key, value) => setRow('timeSlots', index, key, value);
+              const update = (key, value) => setRow('timeSlots', index, key === 'startTime'
+                ? { startTime: value, endTime: closingTime(value, draft.slotDurationMinutes) }
+                : { [key]: value });
               return <div className={`owner-fields owner-edit-row slot-config-row${slot.isActive ? '' : ' slot-config-inactive'}`} key={index}>
-                {field('Start time', 'startTime', slot, update)}{field('End time', 'endTime', slot, update)}
+                {field('Start time', 'startTime', slot, update)}<Field label="End time" value={slot.endTime} readOnly />
                 {field('Price (₹)', 'price', slot, update, { type: 'number', min: 0, step: '.01' })}
                 <p className="slot-row-status slot-state">{slot.isActive ? 'Active' : 'Inactive'}</p>
                 {pendingSlotRemoval === index && <p className="account-note slot-row-status" role="status">Remove the {slot.startTime}–{slot.endTime} slot?</p>}
@@ -271,7 +294,7 @@ export default function TurfSetup({ id, navigate, onSaved, onMediaChange, sectio
           <section className="owner-panel">
             <h2>Equipment rentals</h2>
             {draft.equipment.map((item, index) => {
-              const update = (key, value) => setRow('equipment', index, key, value);
+              const update = (key, value) => setRow('equipment', index, { [key]: value });
               return <div className="owner-fields owner-edit-row owner-equipment-row" key={index}>
                 <SuggestionInput label="Equipment name" value={item.name} suggestions={equipmentSuggestions} onChange={(value) => update('name', value)} required />
                 {field('Rental price (₹)', 'price', item, update, { type: 'number', min: 0, step: '.01' })}
@@ -307,9 +330,10 @@ export default function TurfSetup({ id, navigate, onSaved, onMediaChange, sectio
             <ListEditor label="Add a turf rule" suggestions={ruleSuggestions} items={draft.regulations} update={(items) => set('regulations', items)} />
             <div className="owner-form">
               <BookingPolicyFields label="Cancellation" value={policies.cancellation} onChange={(value) => set('policies', { ...policies, cancellation: value })} />
-              <BookingPolicyFields label="Rescheduling" value={rescheduling} onChange={(value) => set('policies', { ...policies, rescheduling: value })}>
-                <p className="account-note">A booking can be rescheduled once. A 12-hour cutoff means a 10 PM slot can be rescheduled up to 10 AM that day.</p>
-              </BookingPolicyFields>
+              <div>
+                <Toggle label="Pay at venue" value={policies.payAtVenue} update={(payAtVenue) => set('policies', { ...policies, payAtVenue })} />
+                <p className="account-note">Customers can reserve slots and equipment and pay when they arrive.</p>
+              </div>
             </div>
           </section>}
           {showFacilities && <section className="owner-panel">

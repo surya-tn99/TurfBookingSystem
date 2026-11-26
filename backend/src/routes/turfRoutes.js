@@ -172,7 +172,7 @@ router.put('/:id/configure', handle(async (req, res) => {
   const turf = await Turf.findOneAndUpdate(owned(req), { $set: {
     ...fields,
     'policies.cancellation': policies.cancellation,
-    'policies.rescheduling': policies.rescheduling,
+    ...(policies.payAtVenue !== undefined && { 'policies.payAtVenue': policies.payAtVenue }),
   } }, { returnDocument: 'after', runValidators: true });
   return turf ? res.json({ turf }) : missing(res);
 }));

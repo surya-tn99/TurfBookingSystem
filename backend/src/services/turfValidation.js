@@ -103,13 +103,13 @@ export function configuration(body) {
   const restrooms = object(facilities.restrooms ?? {});
   const floodlights = object(facilities.floodlights ?? {});
   const policies = object(input.policies ?? {});
-  const rescheduling = bookingPolicy(policies.rescheduling ?? (
-    Number.isFinite(policies.freeRescheduleHours) ? { available: true, cutoffHours: policies.freeRescheduleHours } : undefined
-  ), 'rescheduling');
+  if (policies.payAtVenue !== undefined && typeof policies.payAtVenue !== 'boolean') invalid('Choose a valid payment option.');
   const venueType = facilities.venueType || 'outdoor';
   if (!['outdoor', 'indoor', 'hybrid'].includes(venueType)) invalid('Choose a valid venue type.');
-  const slotDurationMinutes = input.slotDurationMinutes ?? 60;
-  if (![30, 60, 90].includes(slotDurationMinutes)) invalid('Choose a 30, 60 or 90 minute slot duration.');
+  const slotDurationMinutes = input.slotDurationMinutes === undefined ? 60 : input.slotDurationMinutes;
+  if (!Number.isInteger(slotDurationMinutes) || slotDurationMinutes < 1 || slotDurationMinutes > 24 * 60) {
+    invalid('Enter a slot duration from 1 to 1,440 whole minutes.');
+  }
   const count = (value) => number(value ?? 0, 0, 100_000, true);
   return {
     sports, timeSlots, equipment, slotDurationMinutes,
@@ -129,8 +129,8 @@ export function configuration(body) {
     },
     regulations: labels(input.regulations ?? [], 50),
     policies: {
+      payAtVenue: policies.payAtVenue,
       cancellation: bookingPolicy(policies.cancellation, 'cancellation'),
-      rescheduling: { ...rescheduling, maxChanges: rescheduling.available ? 1 : null },
     },
     isConfigured: sports.length > 0 && active.length > 0,
   };
