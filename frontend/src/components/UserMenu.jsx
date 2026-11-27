@@ -13,7 +13,7 @@ export default function UserMenu({ name, onLogout, isOwner, showProfile, isStaff
 
   function openPage(href) {
     setOpen(false);
-    navigate(href);
+    navigate(href, href === profileSettingsPath ? { state: { fromProfileMenu: true } } : undefined);
   }
 
   return (

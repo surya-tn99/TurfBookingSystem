@@ -80,6 +80,10 @@ export default function ProfileSettings({ user, token, navigate, onSave, onSessi
   }
 
   return <main className="frame profile-layout">
+    <AppLink className="button button-outline owner-back profile-back" href={isManager ? managerPath : '/'} navigate={(href) => {
+      if (window.history.state?.fromProfileMenu) window.history.back();
+      else navigate(href, { replace: true });
+    }}>Back</AppLink>
     <section className="account-card" aria-labelledby="profile-settings-title">
       <h1 id="profile-settings-title">Profile</h1>
       <form className="profile-form" onSubmit={saveProfile}>
@@ -101,7 +105,7 @@ export default function ProfileSettings({ user, token, navigate, onSave, onSessi
       </form>
       {!isManager && <section className="profile-section" aria-labelledby="profile-wallet-title">
         <h2 id="profile-wallet-title">Wallet</h2>
-        <AppLink className="button button-outline" href="/wallet" navigate={navigate}>Open Wallet</AppLink>
+        <AppLink className="button button-outline" href="/wallet" navigate={(href) => navigate(href, { state: { fromProfile: true } })}>Open Wallet</AppLink>
       </section>}
       <section className="profile-section" aria-labelledby="delete-account-title">
         <h2 id="delete-account-title">Delete account</h2>

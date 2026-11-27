@@ -96,7 +96,10 @@ export default function Wallet({ token, navigate }) {
   }
 
   return <main className="frame owner-page booking-page">
-    <AppLink className="button button-outline owner-back" href={profileSettingsPath} navigate={navigate}>Back to Profile</AppLink>
+    <AppLink className="button button-outline owner-back" href={profileSettingsPath} navigate={(href) => {
+      if (window.history.state?.fromProfile) window.history.back();
+      else navigate(href);
+    }}>Back to Profile</AppLink>
     <h1>Wallet</h1>
     {notice && <p role="status">{notice}</p>}
     {error && <div>

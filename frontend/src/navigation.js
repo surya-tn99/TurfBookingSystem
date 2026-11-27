@@ -35,13 +35,13 @@ export function useNavigation() {
     };
   }, []);
 
-  const navigate = useCallback((href, { replace = false } = {}) => {
+  const navigate = useCallback((href, { replace = false, state = null } = {}) => {
     const from = window.location.pathname;
     const target = new URL(href, window.location.href);
     if (target.href === window.location.href) return;
 
-    if (replace) window.history.replaceState(null, '', target.href);
-    else window.history.pushState(null, '', target.href);
+    if (replace) window.history.replaceState(state, '', target.href);
+    else window.history.pushState(state, '', target.href);
 
     normalizeLegacyRoute();
     setRoute(currentRoute());
