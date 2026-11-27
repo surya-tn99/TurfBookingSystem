@@ -223,7 +223,8 @@ export default function App() {
       ) : isStaffArea ? (
         <StaffDashboard key={`staff:${user.id}`} feedback={path === staffFeedbackPath} token={savedToken()} navigate={navigate} />
       ) : isRegistration ? (
-        <TurfRegistration user={user} navigate={navigate} />
+        <TurfRegistration user={user} navigate={navigate}
+          onAcceptFeeTerms={() => setUser((current) => current?.id === user.id ? { ...current, monthlyFeeTermsAccepted: true } : current)} />
       ) : turfMatch?.[2] ? (
         <TurfSetup key={turfMatch[1]} id={turfMatch[1]} navigate={navigate} />
       ) : turfMatch ? (

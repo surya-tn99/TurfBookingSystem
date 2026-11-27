@@ -25,11 +25,11 @@ export async function staffSchedule(turf, date) {
     }),
     bookings: reservations.filter(({ status }) => status !== 'expired')
       .sort((a, b) => a.startTime.localeCompare(b.startTime)).map((booking) => {
-        const { id, startTime, endTime, amount, equipment, paymentMethod, status } = bookingSummary(booking, date);
+        const { id, startTime, endTime, amount, equipment, paymentMethod, status, venuePaidAt } = bookingSummary(booking, date);
         const account = contacts.get(String(booking.customer));
         const contact = booking.walkIn?.phone ? booking.walkIn : account?.role === 'customer' ? account : undefined;
         const recorder = contacts.get(String(booking.recordedBy));
-        return { id, startTime, endTime, amount, equipment, status, paymentMethod,
+        return { id, startTime, endTime, amount, equipment, status, paymentMethod, venuePaidAt,
           walkIn: Boolean(booking.walkIn?.phone), customerName: contact?.name, customerPhone: contact?.phone,
           recordedBy: recorder?.role === 'staff' ? recorder.name : undefined };
       }),

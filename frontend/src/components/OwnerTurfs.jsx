@@ -4,6 +4,7 @@ import { managerPath, ownerRequest, turfPath, turfRating } from '../ownerApi';
 import AppLink from './AppLink';
 import { Dropdown, SuggestionInput } from './Dropdown';
 import LoadingImage from './LoadingImage';
+import ManagerFeeAgreement from './ManagerFeeAgreement';
 import NameTooltip from './NameTooltip';
 import Skeleton from './Skeleton';
 
@@ -49,26 +50,29 @@ export function OwnerDashboard({ user, navigate }) {
   );
 }
 
-export function TurfRegistration({ user, navigate }) {
+export function TurfRegistration({ user, navigate, onAcceptFeeTerms }) {
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [state, setState] = useState('');
+  const needsFeeTerms = !user.monthlyFeeTermsAccepted;
+  const canSubmit = !busy && (!needsFeeTerms || accepted);
 
   async function submit(event) {
     event.preventDefault();
-    if (!accepted || busy) return;
+    if (!canSubmit) return;
     const fields = new FormData(event.currentTarget);
     const address = Object.fromEntries(['state', 'city', 'street', 'area', 'pincode', 'mapPinUrl'].map((key) => [key, fields.get(key)]));
     setBusy(true);
     setError('');
     try {
-      const { turf } = await ownerRequest('', {
+      const { turf, monthlyFeeTermsAccepted } = await ownerRequest('', {
         method: 'POST', body: {
           name: fields.get('name'), contactPhone: fields.get('contactPhone'), contactEmail: fields.get('contactEmail'),
-          address, gstNumber: fields.get('gstNumber'), commissionAccepted: accepted,
+          address, gstNumber: fields.get('gstNumber'), ...(needsFeeTerms && { monthlyFeeTermsAccepted: accepted }),
         },
       });
+      if (needsFeeTerms && monthlyFeeTermsAccepted) onAcceptFeeTerms();
       navigate(turfPath(turf._id) + '/setup', { replace: true });
     } catch (failure) { setError(failure.message); }
     finally { setBusy(false); }
@@ -97,9 +101,9 @@ export function TurfRegistration({ user, navigate }) {
           <label>Pincode<input name="pincode" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required /></label>
           <label>Google Maps location link<input type="url" name="mapPinUrl" required /></label>
         </div>
-        <label className="owner-agreement"><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} required />I agree to the 3% platform commission on every customer booking.</label>
+        {needsFeeTerms && <ManagerFeeAgreement accepted={accepted} onChange={setAccepted} />}
         {error && <p className="auth-error" role="alert">{error}</p>}
-        <button className="button button-primary registration-submit" aria-busy={busy} disabled={!accepted || busy}>{busy ? 'Registering…' : 'Register and continue'}</button>
+        <button className="button button-primary registration-submit" aria-busy={busy} disabled={!canSubmit}>{busy ? 'Registering…' : 'Register and continue'}</button>
       </form>
     </main>
   );

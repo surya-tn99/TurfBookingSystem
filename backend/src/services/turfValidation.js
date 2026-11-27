@@ -49,7 +49,6 @@ export function turfContact(input) {
 
 export function registration(body) {
   const input = object(body);
-  if (input.commissionAccepted !== true) invalid('You must accept the 3% platform commission to register a turf.');
   const addressInput = object(input.address);
   const address = Object.fromEntries(['street', 'area', 'city', 'state', 'pincode'].map((key) => [key, string(addressInput[key])]));
   if (!address.street || !address.city || !address.state || !/^\d{6}$/.test(address.pincode)) invalid('Enter a complete address with a six-digit pincode.');

@@ -1,7 +1,8 @@
 import { apiBase, serviceUnavailableMessage } from './auth';
 
 const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 });
-export const bookingPrice = (amount) => amount === 0 ? 'Free' : currency.format(amount / 100);
+export const formatBookingAmount = (amount) => currency.format(amount / 100);
+export const bookingPrice = (amount) => amount === 0 ? 'Free' : formatBookingAmount(amount);
 
 export async function turfRequest(path, { token, body, signal, method = body ? 'POST' : 'GET' } = {}) {
   const timeout = AbortSignal.timeout(25_000);

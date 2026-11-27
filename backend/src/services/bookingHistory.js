@@ -20,11 +20,11 @@ export async function customerBookingHistory(customer) {
   const previous = [];
 
   for (const booking of bookings) {
-    const { id, turfName, date, startTime, endTime, amount, equipment, paymentMethod, status } = bookingSummary(booking, booking.date);
+    const { id, turfName, date, startTime, endTime, amount, equipment, paymentMethod, status, venuePaidAt } = bookingSummary(booking, booking.date);
     const isCompleted = completedIds.has(String(id));
     const turfReviews = reviews.get(booking.turfId);
     const review = turfReviews?.reviews.get(String(id)) ?? null;
-    const entry = { id, turfId: booking.turfId, turfName, date, startTime, endTime, amount, equipment, paymentMethod, status,
+    const entry = { id, turfId: booking.turfId, turfName, date, startTime, endTime, amount, equipment, paymentMethod, status, venuePaidAt,
       completed: isCompleted, review, canReview: isCompleted && Boolean(turfReviews?.available) && !review };
     if (isCurrentBooking(booking, now)) {
       const reason = cancellationReason(booking, turfPolicies.get(booking.turfId), now);

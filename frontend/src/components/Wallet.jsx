@@ -13,6 +13,7 @@ function paymentLabel(booking) {
   if (booking.status === 'cancelled') return 'Canceled';
   if (booking.status === 'expired') return 'Hold expired';
   if (booking.status === 'pending') return 'Payment pending';
+  if (booking.venuePaidAt) return 'Paid at venue';
   if (booking.paymentMethod === 'venue') return booking.completed ? 'Payment at venue' : 'Pay at venue';
   return booking.paymentMethod === 'online' ? 'Paid online' : 'No payment needed';
 }

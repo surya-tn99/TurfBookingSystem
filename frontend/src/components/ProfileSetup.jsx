@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { requestAuth, serviceUnavailableMessage } from '../auth';
+import ManagerFeeAgreement from './ManagerFeeAgreement';
 
 export default function ProfileSetup({ user, token, onComplete, onLogout }) {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+  const needsFeeTerms = user.role === 'owner' && !user.monthlyFeeTermsAccepted;
   const request = useRef(null);
 
   useEffect(() => () => request.current?.abort(), []);
 
   async function saveProfile(event) {
     event.preventDefault();
-    if (request.current) return;
+    if (request.current || (needsFeeTerms && !accepted)) return;
 
     const fields = new FormData(event.currentTarget);
     const controller = new AbortController();
@@ -22,7 +25,8 @@ export default function ProfileSetup({ user, token, onComplete, onLogout }) {
       const response = await requestAuth('me', {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: fields.get('name'), phone: fields.get('phone') }),
+        body: JSON.stringify({ name: fields.get('name'), phone: fields.get('phone'),
+          ...(needsFeeTerms && { monthlyFeeTermsAccepted: accepted }) }),
         signal: controller.signal,
       });
       const data = await response.json();
@@ -60,9 +64,10 @@ export default function ProfileSetup({ user, token, onComplete, onLogout }) {
             <input name="phone" type="tel" autoComplete="tel" aria-describedby="phone-hint" maxLength={32} required />
           </label>
           <p id="phone-hint" className="account-note">Use 10 digits for an Indian number. For other countries, include the country code.</p>
+          {needsFeeTerms && <ManagerFeeAgreement accepted={accepted} onChange={setAccepted} />}
           {error && <p className="auth-error" role="alert">{error}</p>}
           <div className="profile-actions">
-            <button className="button button-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Continue'}</button>
+            <button className="button button-primary" type="submit" disabled={saving || (needsFeeTerms && !accepted)}>{saving ? 'Saving…' : 'Continue'}</button>
             <button className="button button-plain" type="button" onClick={onLogout}>Log out</button>
           </div>
         </form>

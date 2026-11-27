@@ -25,6 +25,7 @@ function accountProfile(user) {
     avatar: user.avatar,
     walletBalance: user.walletBalance || 0,
     needsProfile: user.needsProfile === true,
+    ...(user.role === 'owner' && { monthlyFeeTermsAccepted: Boolean(user.monthlyFeeTermsAcceptedAt) }),
   };
 }
 
@@ -124,7 +125,7 @@ export function getMe(req, res) {
 }
 
 export async function completeProfile(req, res, next) {
-  const { name, phone } = req.body ?? {};
+  const { name, phone, monthlyFeeTermsAccepted } = req.body ?? {};
   const fullName = accountName(name);
   const normalizedPhone = accountPhone(phone);
   if (!fullName) {
@@ -133,11 +134,18 @@ export async function completeProfile(req, res, next) {
   if (!normalizedPhone) {
     return res.status(400).json({ success: false, message: 'Enter a 10-digit Indian phone number or include your country code.' });
   }
+  const changes = { name: fullName, phone: normalizedPhone, needsProfile: false };
+  if (req.user.role === 'owner' && req.user.needsProfile && !req.user.monthlyFeeTermsAcceptedAt) {
+    if (monthlyFeeTermsAccepted !== true) {
+      return res.status(400).json({ success: false, message: 'Accept the fixed monthly platform fee terms to continue.' });
+    }
+    changes.monthlyFeeTermsAcceptedAt = new Date();
+  }
 
   try {
     const updatedUser = await User.findOneAndUpdate(
       { _id: req.user.id, isActive: true, needsProfile: true },
-      { $set: { name: fullName, phone: normalizedPhone, needsProfile: false } },
+      { $set: changes },
       { returnDocument: 'after', runValidators: true },
     );
     const user = updatedUser ?? await User.findById(req.user.id);

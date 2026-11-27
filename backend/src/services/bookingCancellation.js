@@ -7,6 +7,7 @@ const bookingError = (message, status) => Object.assign(new Error(message), { st
 export function cancellationReason(booking, turf, now) {
   if (!isCurrentBooking(booking, now)) return 'This booking is no longer active.';
   if (booking.status === 'pending') return 'Check your payment status before canceling this booking.';
+  if (booking.venuePaidAt) return 'This booking has been paid at the venue. Contact the turf about cancellation.';
   if (bookingSummary(booking, booking.date).paymentMethod === 'online') {
     return 'An online payment must be refunded before the booking can be canceled.';
   }
@@ -31,7 +32,7 @@ export async function cancelCustomerBooking(turfId, date, bookingId, customer) {
   const reason = cancellationReason({ ...booking, date }, turf, Date.now());
   if (reason) throw bookingError(reason, 409);
   const updated = await BookingDay.findOneAndUpdate({
-    _id: dayKey, reservations: { $elemMatch: { _id: bookingId, customer, status: 'confirmed' } },
+    _id: dayKey, reservations: { $elemMatch: { _id: bookingId, customer, status: 'confirmed', venuePaidAt: null } },
   }, { $set: { 'reservations.$.status': 'cancelled', 'reservations.$.cancelledAt': new Date() } },
   { returnDocument: 'after' }).lean();
   const cancelled = findBooking(updated ?? await BookingDay.findById(dayKey).lean());

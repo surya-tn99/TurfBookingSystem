@@ -114,7 +114,8 @@ function BookingStatus({ path, date, id, token, navigate }) {
           <span>{item.name} × {item.quantity}</span><span>{price(item.unitAmount * item.quantity)}</span>
         </li>)}
       </ul>}
-      {!cancelled && <p>{booking.paymentMethod === 'venue' ? `Pay ${price(booking.amount)} at the venue`
+      {!cancelled && <p>{booking.venuePaidAt ? `${price(booking.amount)} paid at the venue`
+        : booking.paymentMethod === 'venue' ? `Pay ${price(booking.amount)} at the venue`
         : `${price(booking.amount)}${confirmed && booking.amount > 0 ? ' paid' : ''}`}</p>}
       {confirmed && <p>Booking reference <strong>{booking.id}</strong></p>}
       {expired && <p>Choose an available slot to start a new booking.</p>}

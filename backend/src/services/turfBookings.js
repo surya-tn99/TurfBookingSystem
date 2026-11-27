@@ -112,8 +112,8 @@ export async function dailySlots(turf, date) {
 }
 
 export function bookingSummary(booking, date) {
-  const { _id, turfName, startTime, endTime, amount, slotAmount = amount, equipment = [], status, expiresAt, checkoutUrl } = booking;
-  return { id: _id, turfName, date, startTime, endTime, amount, slotAmount, equipment, status, expiresAt,
+  const { _id, turfName, startTime, endTime, amount, slotAmount = amount, equipment = [], status, expiresAt, checkoutUrl, venuePaidAt } = booking;
+  return { id: _id, turfName, date, startTime, endTime, amount, slotAmount, equipment, status, expiresAt, venuePaidAt,
     paymentMethod: paymentMethodFor(booking),
     checkoutUrl: status === 'pending' && expiresAt?.getTime() > Date.now() ? checkoutUrl ?? null : null };
 }

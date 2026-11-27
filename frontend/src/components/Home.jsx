@@ -9,6 +9,27 @@ import Skeleton from './Skeleton';
 
 const normalizeLocation = (value) => value.toLowerCase().replace(/\bbangalore\b/g, 'bengaluru');
 
+function TurfGrid({ venues, navigate }) {
+  return <div className="venue-grid">
+    {venues.map((venue) => (
+      <article className="venue" key={venue.href}>
+        <AppLink className="venue-link" href={venue.href} navigate={navigate}>
+          {venue.image ? <LoadingImage className="venue-image" src={venue.image} loading="lazy" />
+            : <div className="venue-image turf-image-empty" aria-hidden="true" />}
+          <div className="venue-details">
+            <h3><NameTooltip text={venue.name} insideLink /></h3>
+            {venue.street && <p>{venue.street}</p>}
+            {venue.city && <p>{venue.city}</p>}
+            {Number.isFinite(venue.rating) ? (
+              <p className="venue-rating"><span aria-hidden="true">★</span> {venue.rating.toFixed(1)} / 5</p>
+            ) : <p className="venue-rating">No ratings yet</p>}
+          </div>
+        </AppLink>
+      </article>
+    ))}
+  </div>;
+}
+
 export default function Home({ search, navigate }) {
   const [venues, setVenues] = useState(null);
   const [unavailable, setUnavailable] = useState(false);
@@ -19,14 +40,21 @@ export default function Home({ search, navigate }) {
   const sport = params.get('sport')?.trim() || '';
   const sportQuery = sport.toLowerCase();
   const locationQuery = normalizeLocation(location);
+  const cities = new Map((venues ?? []).map(({ city }) => city?.trim()).filter(Boolean)
+    .map((city) => [normalizeLocation(city), city]));
+  const exactCity = cities.has(locationQuery);
+  const selectedCity = exactCity ? locationQuery : '';
+  const cityOptions = [...cities].sort(([, a], [, b]) => a.localeCompare(b))
+    .map(([value, label]) => ({ value, label }));
   const sports = new Map((venues ?? []).flatMap((venue) =>
     venue.sports.map((name) => [name.toLowerCase(), name])));
   const exactSport = sports.has(sportQuery);
   if (sportQuery && !exactSport) sports.set(sportQuery, sport);
   const sportOptions = [...sports.values()].sort((a, b) => a.localeCompare(b));
   const results = (venues ?? []).filter((venue) => {
-    const venueLocation = normalizeLocation([venue.area, venue.city, venue.state].filter(Boolean).join(' '));
-    return venueLocation.includes(locationQuery) && (!sportQuery || venue.sports.some((name) => (
+    const locationMatch = exactCity ? normalizeLocation(venue.city?.trim() || '') === locationQuery
+      : normalizeLocation([venue.area, venue.city, venue.state].filter(Boolean).join(' ')).includes(locationQuery);
+    return locationMatch && (!sportQuery || venue.sports.some((name) => (
       exactSport ? name.toLowerCase() === sportQuery : name.toLowerCase().includes(sportQuery)
     )));
   });
@@ -72,7 +100,9 @@ export default function Home({ search, navigate }) {
       </section>
 
       <form key={search} className="turf-search" aria-label="Find a turf" action="/" method="get" onSubmit={searchTurfs}>
-        <label>Location <input name="location" placeholder="City or neighborhood" defaultValue={location} /></label>
+        <Dropdown key={selectedCity} label="Location" name="location" defaultValue={selectedCity} options={[
+          { value: '', label: 'All cities' }, ...cityOptions,
+        ]} />
         <Dropdown label="Sport" name="sport" defaultValue={sportQuery} options={[
           { value: '', label: 'All sports' }, ...sportOptions.map((label) => ({ value: label.toLowerCase(), label })),
         ]} />
@@ -88,29 +118,15 @@ export default function Home({ search, navigate }) {
         </div>}
         {venues && (!results.length || searched) && <p className="home-note" role="status">
           {results.length ? `${results.length} ${results.length === 1 ? 'match' : 'matches'}.`
-            : searched ? 'No matches. Try another location or sport.' : 'No turfs are ready to list yet.'}
+            : searched ? 'No turfs found for this search.' : 'No turfs are ready to list yet.'}
         </p>}
-        {results.length > 0 && (
-          <div className="venue-grid">
-            {results.map((venue) => (
-              <article className="venue" key={venue.href}>
-                <AppLink className="venue-link" href={venue.href} navigate={navigate}>
-                  {venue.image ? <LoadingImage className="venue-image" src={venue.image} loading="lazy" />
-                    : <div className="venue-image turf-image-empty" aria-hidden="true" />}
-                  <div className="venue-details">
-                    <h3><NameTooltip text={venue.name} insideLink /></h3>
-                    {venue.street && <p>{venue.street}</p>}
-                    {venue.city && <p>{venue.city}</p>}
-                    {Number.isFinite(venue.rating) ? (
-                      <p className="venue-rating"><span aria-hidden="true">★</span> {venue.rating.toFixed(1)} / 5</p>
-                    ) : <p className="venue-rating">No ratings yet</p>}
-                  </div>
-                </AppLink>
-              </article>
-            ))}
-          </div>
-        )}
+        {results.length > 0 && <TurfGrid venues={results} navigate={navigate} />}
       </section>
+      {searched && venues && <section className="home-section" aria-labelledby="explore-title">
+        <h2 id="explore-title">Explore turfs</h2>
+        {venues.length ? <TurfGrid venues={venues} navigate={navigate} />
+          : <p className="home-note">No turfs are ready to list yet.</p>}
+      </section>}
     </main>
   );
 }

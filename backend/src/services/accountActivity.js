@@ -6,6 +6,6 @@ export function withActiveAccount(id, role, operation) {
     const user = await User.findOneAndUpdate({ _id: id, role, isActive: true },
       { $inc: { accountActivityVersion: 1 } }, { session, returnDocument: 'after' });
     if (!user) throw Object.assign(new Error('This account is no longer active.'), { status: 401 });
-    return operation(session);
+    return operation(session, user);
   });
 }

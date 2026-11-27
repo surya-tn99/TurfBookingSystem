@@ -10,6 +10,7 @@ const reservation = new Schema({
   endTime: { type: String, required: true },
   amount: { type: Number, required: true },
   paymentMethod: { type: String, enum: ['online', 'venue', 'free'] },
+  venuePaidAt: Date,
   slotAmount: Number,
   equipment: [new Schema({ id: String, name: String, unitAmount: Number, quantity: Number }, { _id: false, id: false })],
   status: { type: String, enum: ['pending', 'confirmed', 'expired', 'cancelled'], required: true },

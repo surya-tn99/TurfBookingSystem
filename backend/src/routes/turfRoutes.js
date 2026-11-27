@@ -13,6 +13,7 @@ import { staffSchedule } from '../services/staffBookings.js';
 import { removePhotos, storageError, turfStorage, uploadPhoto } from '../services/storageService.js';
 import { configuration, registration, turfContact, validEmail } from '../services/turfValidation.js';
 import { validBookingDate } from '../services/turfBookings.js';
+import { recordVenuePayment, turfRevenue } from '../services/turfRevenue.js';
 import { scheduleTurfVerification, syncPendingVerifications } from '../services/turfVerificationService.js';
 import { requireAuthService } from './authRoutes.js';
 
@@ -39,13 +40,18 @@ router.use(requireAuthService, protect, authorize('owner'), (req, res, next) => 
 router.param('id', (req, res, next, id) => isObjectIdOrHexString(id) ? next() : missing(res));
 
 router.post('/', handle(async (req, res) => {
-  const details = {
-    ...registration(req.body), owner: req.user.id, commissionAccepted: true,
-    commissionAcceptedAt: new Date(),
-  };
-  const [turf] = await withActiveAccount(req.user.id, 'owner', (session) => Turf.create([details], { session }));
+  const details = { ...registration(req.body), owner: req.user.id };
+  const [turf] = await withActiveAccount(req.user.id, 'owner', async (session, user) => {
+    if (!user.monthlyFeeTermsAcceptedAt) {
+      if (req.body.monthlyFeeTermsAccepted !== true) {
+        throw Object.assign(new Error('Accept the fixed monthly platform fee terms to register a turf.'), { status: 400 });
+      }
+      await User.updateOne({ _id: user.id }, { $set: { monthlyFeeTermsAcceptedAt: new Date() } }, { session });
+    }
+    return Turf.create([details], { session });
+  });
   scheduleTurfVerification(turf.id);
-  return res.status(201).json({ turf });
+  return res.status(201).json({ turf, monthlyFeeTermsAccepted: true });
 }));
 
 router.get('/', handle(async (req, res) => {
@@ -170,6 +176,23 @@ router.get('/:id/schedule', handle(async (req, res) => {
   const turf = await Turf.findOne(owned(req)).select('name timeSlots').lean();
   if (!turf) return missing(res);
   return res.json(await staffSchedule(turf, req.query.date));
+}));
+
+router.get('/:id/revenue', handle(async (req, res) => {
+  const { period = 'all', from, to } = req.query;
+  if (!['all', 'month', 'last30', 'custom'].includes(period)) return res.status(400).json({ message: 'Choose a valid booking date range.' });
+  if (period === 'custom' && (!validBookingDate(from) || !validBookingDate(to) || from > to)) {
+    return res.status(400).json({ message: 'Choose valid start and end dates in order.' });
+  }
+  if (!await Turf.exists(owned(req))) return missing(res);
+  return res.json(await turfRevenue(req.params.id, period, from, to));
+}));
+
+router.patch('/:id/bookings/:date/:bookingId/venue-payment', handle(async (req, res) => {
+  const { id, date, bookingId } = req.params;
+  if (!validBookingDate(date) || !isObjectIdOrHexString(bookingId)) return res.status(404).json({ message: 'Booking not found.' });
+  if (!await Turf.exists(owned(req))) return missing(res);
+  return res.json({ venuePaidAt: await recordVenuePayment(id, date, bookingId.toLowerCase()) });
 }));
 
 router.put('/:id/configure', handle(async (req, res) => {

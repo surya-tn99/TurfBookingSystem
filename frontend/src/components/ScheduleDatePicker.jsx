@@ -13,7 +13,7 @@ function firstOfMonth(timestamp, offset = 0) {
   return date.setUTCMonth(date.getUTCMonth() + offset, 1);
 }
 
-export default function ScheduleDatePicker({ value, today, onChange, disabled }) {
+export default function ScheduleDatePicker({ label = 'Booking date', value, today, onChange, disabled }) {
   const id = useId();
   const root = useRef(null);
   const trigger = useRef(null);
@@ -59,7 +59,7 @@ export default function ScheduleDatePicker({ value, today, onChange, disabled })
   }} onKeyDown={(event) => {
     if (open && event.key === 'Escape') { event.preventDefault(); closeCalendar(); }
   }}>
-    <span id={`${id}-label`}>Booking date</span>
+    <span id={`${id}-label`}>{label}</span>
     <button ref={trigger} type="button" className="staff-date-trigger" disabled={disabled} aria-expanded={open}
       aria-haspopup="dialog" aria-controls={open ? id : undefined} aria-labelledby={`${id}-label ${id}-value`} onClick={() => {
         if (open) { closeCalendar(); return; }
@@ -70,7 +70,7 @@ export default function ScheduleDatePicker({ value, today, onChange, disabled })
       <span id={`${id}-value`}>{displayDate.format(Date.parse(value))}</span>
       <span className="staff-date-icon" aria-hidden="true" />
     </button>
-    {open && <div className="staff-date-calendar" role="dialog" id={id} aria-label="Choose booking date">
+    {open && <div className="staff-date-calendar" role="dialog" id={id} aria-label={`Choose ${label.toLowerCase()}`}>
       <div className="staff-calendar-heading">
         <button type="button" className="button button-outline" aria-label="Previous month" onClick={() => setActiveDay(firstOfMonth(month, -1))}>‹</button>
         <strong aria-live="polite">{monthFormat.format(month)}</strong>

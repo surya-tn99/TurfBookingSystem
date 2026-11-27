@@ -5,6 +5,7 @@ import { Dropdown } from './Dropdown';
 import NameTooltip from './NameTooltip';
 import Skeleton from './Skeleton';
 import TurfPhotoSlideshow from './TurfPhotoSlideshow';
+import TurfRevenue from './TurfRevenue';
 import TurfSchedule from './TurfSchedule';
 import TurfSetup from './TurfSetup';
 
@@ -178,8 +179,8 @@ export default function TurfDetails({ id, ownerEmail, token, navigate }) {
     </nav>
     <Dropdown className="turf-section-picker" label="Section" value={section} onChange={setSection}
       options={sections.map(([value, label]) => ({ value, label }))} />
-    {section === 'revenue' && <section className="owner-panel"><h2>Revenue</h2><p>Revenue will appear here once bookings and payments are enabled.</p></section>}
-    {section === 'bookings' && <TurfSchedule endpoint={`/owner/turfs/${id}`} token={token} />}
+    {section === 'revenue' && <TurfRevenue id={id} token={token} openBookings={() => setSection('bookings')} />}
+    {section === 'bookings' && <TurfSchedule endpoint={`/owner/turfs/${id}`} token={token} recordPayments />}
     {section === 'pricing' && <TurfSetup id={id} navigate={navigate} section="pricing" onSaved={setTurf} />}
     {section === 'facilities' && <TurfSetup
       id={id}

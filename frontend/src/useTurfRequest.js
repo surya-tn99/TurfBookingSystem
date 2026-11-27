@@ -5,6 +5,7 @@ export function useTurfRequest(path, token) {
   const [result, setResult] = useState(null);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    if (!path) return;
     const controller = new AbortController();
     turfRequest(path, { token, signal: controller.signal }).then((data) => {
       if (!controller.signal.aborted) setResult({ path, data });

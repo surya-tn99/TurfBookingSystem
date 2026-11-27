@@ -61,6 +61,11 @@ test('owner registration, setup, isolation, and backend verification', async (t)
     }
     return Object.assign(user, $set);
   });
+  t.mock.method(User, 'updateOne', async ({ _id }, { $set }, { session }) => {
+    assert.equal(session, transactionSession);
+    Object.assign(users.find(({ id }) => id === _id), $set);
+    return { modifiedCount: 1 };
+  });
   t.mock.method(User, 'deleteOne', async ({ _id }, { session }) => {
     assert.equal(session, transactionSession);
     const index = users.findIndex(({ id }) => id === _id);
@@ -81,7 +86,7 @@ test('owner registration, setup, isolation, and backend verification', async (t)
     assert.equal(session, transactionSession);
     const id = makeId();
     const turf = {
-      _id: id, id, ...data, commissionRate: 3, verificationStatus: 'pending',
+      _id: id, id, ...data, verificationStatus: 'pending',
       submittedForVerificationAt: new Date(), sports: [], timeSlots: [], equipment: [], media: { images: [] },
     };
     turfs.push(turf);
@@ -161,6 +166,19 @@ test('owner registration, setup, isolation, and backend verification', async (t)
   assert.equal((await (await authRequest(customer)).json()).user.name, 'Updated Player');
   const managerProfile = await authRequest(owner, '/me/profile', 'PATCH', { name: 'Venue Manager' });
   assert.equal((await managerProfile.json()).user.name, 'Venue Manager');
+  otherOwner.needsProfile = true;
+  const newManagerInfo = { name: 'New Manager', phone: '9123456799' };
+  assert.equal((await authRequest(otherOwner, '/me', 'PATCH', newManagerInfo)).status, 400);
+  assert.equal((await authRequest(otherOwner, '/me', 'PATCH', { ...newManagerInfo, monthlyFeeTermsAccepted: 'true' })).status, 400);
+  const completedProfile = await authRequest(otherOwner, '/me', 'PATCH', { ...newManagerInfo, monthlyFeeTermsAccepted: true });
+  assert.equal(completedProfile.status, 200);
+  assert.equal((await completedProfile.json()).user.monthlyFeeTermsAccepted, true);
+  assert.equal(otherOwner.needsProfile, false);
+  assert.ok(otherOwner.monthlyFeeTermsAcceptedAt instanceof Date);
+  otherCustomer.needsProfile = true;
+  const completedCustomer = await authRequest(otherCustomer, '/me', 'PATCH', { name: otherCustomer.name, phone: otherCustomer.phone });
+  assert.equal(completedCustomer.status, 200);
+  assert.equal((await completedCustomer.json()).user.monthlyFeeTermsAccepted, undefined);
   const registration = {
     name: 'The Five Yard', contactPhone: '9876543210', contactEmail: 'owner@example.test',
     address: { street: '1 Main Road', area: 'Velachery', city: 'Chennai', state: 'Tamil Nadu', pincode: '600042', mapPinUrl: 'https://maps.app.goo.gl/example' },
@@ -169,14 +187,17 @@ test('owner registration, setup, isolation, and backend verification', async (t)
   };
   assert.equal((await request(customer)).status, 403);
   assert.equal((await request(owner, '', 'POST', registration)).status, 400);
-  assert.equal((await request(owner, '', 'POST', { ...registration, commissionAccepted: false })).status, 400);
-  assert.equal((await request(owner, '', 'POST', { ...registration, gstNumber: '', commissionAccepted: true })).status, 400);
-  assert.equal((await request(owner, '', 'POST', { ...registration, address: { ...registration.address, mapPinUrl: '' }, commissionAccepted: true })).status, 400);
-  const created = await request(owner, '', 'POST', { ...registration, commissionAccepted: true });
+  assert.equal((await request(owner, '', 'POST', { ...registration, commissionAccepted: true })).status, 400);
+  assert.equal((await request(owner, '', 'POST', { ...registration, monthlyFeeTermsAccepted: false })).status, 400);
+  assert.equal((await request(owner, '', 'POST', { ...registration, gstNumber: '', monthlyFeeTermsAccepted: true })).status, 400);
+  assert.equal((await request(owner, '', 'POST', { ...registration, address: { ...registration.address, mapPinUrl: '' }, monthlyFeeTermsAccepted: true })).status, 400);
+  const created = await request(owner, '', 'POST', { ...registration, monthlyFeeTermsAccepted: true });
   assert.equal(created.status, 201);
-  const { turf } = await created.json();
+  const { turf, monthlyFeeTermsAccepted } = await created.json();
   assert.equal(turf.verificationStatus, 'pending');
-  assert.equal(turf.commissionRate, 3);
+  assert.equal(turf.commissionRate, undefined);
+  assert.equal(monthlyFeeTermsAccepted, true);
+  assert.equal((await (await authRequest(owner)).json()).user.monthlyFeeTermsAccepted, true);
   const path = '/' + turf._id;
   const publicListings = async () => {
     const response = await fetch('http://127.0.0.1:' + server.address().port + '/turfs');
@@ -282,17 +303,27 @@ test('owner registration, setup, isolation, and backend verification', async (t)
   await t.test('booking access, payment verification and overlapping slot holds', async (bookingTest) => {
     const days = new Map();
     bookingTest.mock.method(BookingDay, 'findById', (key) => ({ lean: async () => days.get(key) }));
-    bookingTest.mock.method(BookingDay, 'find', ({ reservations }) => ({ lean: async () =>
-      [...days].filter(([, day]) => day.reservations.some((entry) =>
+    bookingTest.mock.method(BookingDay, 'find', ({ _id, reservations }) => ({ lean: async () =>
+      [...days].filter(([key, day]) => _id ? key >= _id.$gte && (_id.$lte ? key <= _id.$lte : key < _id.$lt) : day.reservations.some((entry) =>
         entry.customer === reservations.$elemMatch.customer
         && (!reservations.$elemMatch.status || entry.status === reservations.$elemMatch.status)))
         .map(([_id, day]) => ({ _id, ...day })),
     }));
     bookingTest.mock.method(BookingDay, 'updateOne', async ({ _id, reservations }, update) => {
       if (!days.has(_id)) days.set(_id, { reservations: [] });
+      const day = days.get(_id);
+      const paidAt = update.$set?.['reservations.$.venuePaidAt'];
+      if (paidAt) {
+        const match = reservations.$elemMatch;
+        const entry = day.reservations.find((item) => String(item._id) === String(match._id) && item.status === match.status
+          && item.paymentMethod === match.paymentMethod && item.amount > match.amount.$gt
+          && (item.venuePaidAt ?? null) === match.venuePaidAt);
+        if (!entry) return { modifiedCount: 0 };
+        entry.venuePaidAt = paidAt;
+        return { modifiedCount: 1 };
+      }
       if (!update.$push) return { modifiedCount: 0 };
       const overlap = reservations.$not.$elemMatch;
-      const day = days.get(_id);
       if (day.reservations.some((entry) => overlap.status.$in.includes(entry.status)
         && entry.startTime < overlap.startTime.$lt && entry.endTime > overlap.endTime.$gt)) return { modifiedCount: 0 };
       day.reservations.push({ ...update.$push.reservations });
@@ -302,7 +333,7 @@ test('owner registration, setup, isolation, and backend verification', async (t)
       const day = days.get(_id);
       const match = reservations.$elemMatch;
       const entry = day?.reservations.find((item) => String(item._id) === String(match._id) && item.status === match.status
-        && (!match.customer || item.customer === match.customer));
+        && (!match.customer || item.customer === match.customer) && (match.venuePaidAt !== null || !item.venuePaidAt));
       if (!entry) return null;
       for (const [key, value] of Object.entries($set)) entry[key.split('.').at(-1)] = value;
       return day;
@@ -496,6 +527,47 @@ test('owner registration, setup, isolation, and backend verification', async (t)
     const currentVenue = (await (await wallet(customer)).json()).current.find(({ id }) => id === atVenue.id);
     assert.equal(currentVenue.paymentMethod, 'venue');
 
+    const revenuePath = `${path}/revenue`;
+    const paymentPath = `${path}/bookings/${venueDate}/${atVenue.id}/venue-payment`;
+    assert.equal((await request(customer, revenuePath)).status, 403);
+    assert.equal((await request(otherOwner, revenuePath)).status, 404);
+    assert.equal((await request(owner, `${revenuePath}?period=wrong`)).status, 400);
+    assert.equal((await request(otherOwner, paymentPath, 'PATCH')).status, 404);
+    assert.equal((await request(customer, paymentPath, 'PATCH')).status, 403);
+    assert.equal((await request(owner, `${path}/bookings/${date}/${paid.id}/venue-payment`, 'PATCH')).status, 409);
+    const beforePayment = await (await request(owner, revenuePath)).json();
+    assert.equal(beforePayment.totals.dueAtVenue, atVenue.amount);
+    assert.equal(beforePayment.totals.receivedOnline, paid.amount + 15000);
+    assert.equal(beforePayment.totals.receivedAtVenue, 0);
+    assert.equal(beforePayment.daily.length, 3);
+    const last30 = await (await request(owner, `${revenuePath}?period=last30`)).json();
+    assert.ok(last30.daily.some((day) => day.date === earlier));
+    assert.ok(!last30.daily.some((day) => day.date === venueDate));
+
+    const marked = await request(owner, paymentPath, 'PATCH');
+    assert.equal(marked.status, 200);
+    const { venuePaidAt } = await marked.json();
+    assert.ok(Number.isFinite(Date.parse(venuePaidAt)));
+    assert.deepEqual(await (await request(owner, paymentPath, 'PATCH')).json(), { venuePaidAt });
+    const afterPayment = await (await request(owner, revenuePath)).json();
+    assert.deepEqual(afterPayment.totals, { ...beforePayment.totals, dueAtVenue: 0, receivedAtVenue: atVenue.amount,
+      received: beforePayment.totals.received + atVenue.amount, slots: beforePayment.totals.slots + atVenue.slotAmount,
+      rentals: beforePayment.totals.rentals + atVenue.amount - atVenue.slotAmount });
+    const customRevenuePath = (from, to) => `${revenuePath}?${new URLSearchParams({ period: 'custom', from, to })}`;
+    assert.equal((await request(owner, customRevenuePath(venueDate, date))).status, 400);
+    assert.equal((await request(owner, customRevenuePath('2024-02-30', venueDate))).status, 400);
+    assert.equal((await request(owner, `${revenuePath}?period=custom&from=${venueDate}`)).status, 400);
+    const singleDay = await (await request(owner, customRevenuePath(venueDate, venueDate))).json();
+    assert.deepEqual(singleDay.daily, [{ date: venueDate, bookings: 1, dueAtVenue: 0, received: atVenue.amount }]);
+    const range = await (await request(owner, customRevenuePath(date, venueDate))).json();
+    assert.deepEqual(range.daily.map((day) => day.date), [venueDate, date]);
+    assert.equal(range.totals.received, paid.amount + atVenue.amount);
+    const settledVenue = (await (await wallet(customer)).json()).current.find(({ id }) => id === atVenue.id);
+    assert.equal(settledVenue.venuePaidAt, venuePaidAt);
+    assert.equal(settledVenue.canCancel, false);
+    const venueSchedule = await (await request(owner, `${path}/schedule?date=${venueDate}`)).json();
+    assert.equal(venueSchedule.bookings[0].venuePaidAt, venuePaidAt);
+
     const activeStaff = users.find(({ id }) => id === memberId);
     const staffRequest = (user, route, method = 'GET', body) => fetch(`${origin}/staff${route}`, {
       method, headers: { 'Content-Type': 'application/json',
@@ -571,6 +643,9 @@ test('owner registration, setup, isolation, and backend verification', async (t)
     assert.match((await (await cancel(closingCustomer)).json()).message, /cutoff/);
     assert.equal((await setCancellation(0)).status, 200);
     assert.equal((await cancel(winner, pending.id, date)).status, 409);
+    const paidVenueCancellation = await cancel(customer, atVenue.id, venueDate);
+    assert.equal(paidVenueCancellation.status, 409);
+    assert.match((await paidVenueCancellation.json()).message, /paid at the venue/);
     const closingWallet = await (await wallet(closingCustomer)).json();
     assert.equal(closingWallet.current[0].canCancel, true);
     const cancelled = await cancel(closingCustomer);
@@ -586,7 +661,7 @@ test('owner registration, setup, isolation, and backend verification', async (t)
   assert.equal(dashboard.analytics.totalSlots, 1);
   assert.equal(dashboard.analytics.totalEquipmentUnits, 3);
   assert.equal((await (await request(otherOwner)).json()).turfs.length, 0);
-  assert.equal((await request(owner, '', 'POST', { ...registration, name: 'Second Turf', commissionAccepted: true })).status, 201);
+  assert.equal((await request(owner, '', 'POST', { ...registration, name: 'Second Turf' })).status, 201);
   assert.equal(turfs[0].contactPhone, turfs[1].contactPhone);
   const confirmation = { confirmationName: 'Updated Turf', confirmationEmail: 'OWNER-LOGIN@example.test' };
   assert.equal((await request(otherOwner, path, 'DELETE', confirmation)).status, 404);
@@ -600,7 +675,7 @@ test('owner registration, setup, isolation, and backend verification', async (t)
   assert.equal((await request(owner, path + '/configure', 'PUT', setup)).status, 404);
   const afterRemoval = await (await request(owner)).json();
   assert.deepEqual(afterRemoval.turfs.map(({ name }) => name), ['Second Turf']);
-  const addedAgain = await request(owner, '', 'POST', { ...registration, name: 'Updated Turf', commissionAccepted: true });
+  const addedAgain = await request(owner, '', 'POST', { ...registration, name: 'Updated Turf' });
   assert.equal(addedAgain.status, 201);
   assert.equal((await addedAgain.json()).turf.verificationStatus, 'pending');
   turfs[1].verificationStatus = 'verified';

@@ -7,10 +7,11 @@ import Skeleton from './Skeleton';
 const localDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' });
 const slotLabels = { booked: 'Booked', held: 'Payment pending', ended: 'Ended', available: 'Available' };
 
-export default function TurfSchedule({ endpoint, token, allowWalkIns = false }) {
+export default function TurfSchedule({ endpoint, token, allowWalkIns = false, recordPayments = false }) {
   const today = localDate.format(new Date());
   const [date, setDate] = useState(today);
   const [selected, setSelected] = useState(null);
+  const [paymentToRecord, setPaymentToRecord] = useState(null);
   const [message, setMessage] = useState('');
   const [failure, setFailure] = useState('');
   const [busy, setBusy] = useState(false);
@@ -19,32 +20,42 @@ export default function TurfSchedule({ endpoint, token, allowWalkIns = false }) 
   const turfName = data?.turf.name ?? previousData?.turf.name;
   useEffect(() => () => request.current?.abort(), []);
 
-  async function record(event) {
-    event.preventDefault();
-    if (!selected || request.current) return;
-    const fields = new FormData(event.currentTarget);
+  function clearSelection() {
+    setSelected(null);
+    setPaymentToRecord(null);
+  }
+
+  async function updateSchedule(path, options, successMessage) {
+    if (request.current) return;
     const controller = new AbortController();
     request.current = controller;
     setBusy(true);
     setFailure('');
     setMessage('');
     try {
-      await turfRequest(`${endpoint}/bookings`, { token, signal: controller.signal, body: {
-        date, startTime: selected.startTime, endTime: selected.endTime, customerName: fields.get('customerName'),
-        customerPhone: fields.get('customerPhone'),
-      } });
+      await turfRequest(`${endpoint}${path}`, { ...options, token, signal: controller.signal });
       if (controller.signal.aborted) return;
-      setMessage('Walk-in booking recorded.');
-      setSelected(null);
+      setMessage(successMessage);
+      clearSelection();
       reload();
     } catch (problem) {
       if (controller.signal.aborted) return;
       setFailure(problem.message);
-      if (problem.status === 409) { setSelected(null); reload(); }
+      if (problem.status === 409 || problem.status === 404) { clearSelection(); reload(); }
     } finally {
       request.current = null;
       if (!controller.signal.aborted) setBusy(false);
     }
+  }
+
+  function recordWalkIn(event) {
+    event.preventDefault();
+    if (!selected) return;
+    const fields = new FormData(event.currentTarget);
+    updateSchedule('/bookings', { body: {
+      date, startTime: selected.startTime, endTime: selected.endTime,
+      customerName: fields.get('customerName'), customerPhone: fields.get('customerPhone'),
+    } }, 'Walk-in booking recorded.');
   }
 
   return <section className="owner-panel booking-panel staff-schedule" aria-labelledby="staff-schedule-title">
@@ -53,7 +64,7 @@ export default function TurfSchedule({ endpoint, token, allowWalkIns = false }) 
       <ScheduleDatePicker value={date} today={today} disabled={busy} onChange={(value) => {
         if (value === date) return;
         setDate(value);
-        setSelected(null);
+        clearSelection();
         setMessage('');
         setFailure('');
       }} />
@@ -73,7 +84,7 @@ export default function TurfSchedule({ endpoint, token, allowWalkIns = false }) 
             onClick={() => { setSelected(slot); setFailure(''); setMessage(''); }}>Record walk-in</button>}
         </article>)}
       </div>
-      {selected && <form className="owner-form staff-entry" onSubmit={record}>
+      {selected && <form className="owner-form staff-entry" onSubmit={recordWalkIn}>
         <h3>Walk-in · {selected.startTime}–{selected.endTime} IST</h3>
         <div className="owner-fields">
           <label>Customer name<input name="customerName" maxLength={100} required autoFocus /></label>
@@ -93,6 +104,20 @@ export default function TurfSchedule({ endpoint, token, allowWalkIns = false }) 
         {booking.customerPhone && <a href={`tel:${booking.customerPhone}`}>{booking.customerPhone}</a>}
         {booking.equipment.length > 0 && <p>Equipment · {booking.equipment.map((item) => `${item.name} × ${item.quantity}`).join(', ')}</p>}
         {booking.recordedBy && <p className="account-note">Recorded by {booking.recordedBy}</p>}
+        {booking.status === 'confirmed' && booking.paymentMethod === 'venue' && booking.amount > 0 && <>
+          <p className="account-note">{booking.venuePaidAt ? 'Paid at venue' : 'Due at venue'}</p>
+          {recordPayments && !booking.venuePaidAt && (paymentToRecord === booking.id ? (
+            <div className="staff-entry">
+              <p>Confirm that you received {bookingPrice(booking.amount)} for this booking.</p>
+              <div className="owner-actions">
+                <button type="button" className="button button-primary" disabled={busy}
+                  onClick={() => updateSchedule(`/bookings/${date}/${booking.id}/venue-payment`, { method: 'PATCH' }, 'Venue payment recorded.')}>Confirm payment</button>
+                <button type="button" className="button button-outline" disabled={busy} onClick={() => setPaymentToRecord(null)}>Cancel</button>
+              </div>
+            </div>
+          ) : <div><button type="button" className="button button-outline" disabled={busy}
+            onClick={() => { setPaymentToRecord(booking.id); setFailure(''); setMessage(''); }}>Mark as paid</button></div>)}
+        </>}
       </article>)}
     </>}
   </section>;

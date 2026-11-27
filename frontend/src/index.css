@@ -294,6 +294,19 @@ a.button { display: inline-flex; align-items: center; text-decoration: none; }
 .venue-rating span { color: #956400; }
 .booking-page { max-width: 880px; }
 .booking-panel { display: grid; min-width: 0; gap: 14px; }
+.revenue-heading .dropdown-field { width: min(100%, 200px); }
+.revenue-range { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.revenue-range > :first-child .staff-date-calendar { inset-inline: 0 auto; }
+.revenue-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 10px; margin: 0; }
+.revenue-totals > div { padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: #f5f8f2; }
+.revenue-totals dt { font-weight: 700; }
+.revenue-totals dd { margin: 4px 0 0; font-size: clamp(1.3rem, 3vw, 1.7rem); font-weight: 800; overflow-wrap: anywhere; }
+.revenue-breakdown { padding: 12px 0; border-block: 1px solid var(--line); }
+.revenue-table-wrap { min-width: 0; overflow-x: auto; }
+.revenue-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.revenue-table th, .revenue-table td { padding: 9px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.revenue-table th:first-child { text-align: left; }
+.revenue-table thead { background: #f5f8f2; }
 .booking-dates { display: grid; gap: 10px; min-width: 0; }
 .booking-date-heading, .booking-step-summary { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
 .booking-date-controls { display: flex; gap: 6px; }
@@ -456,7 +469,7 @@ a.button { display: inline-flex; align-items: center; text-decoration: none; }
 .staff-date-trigger:focus { border-color: var(--green); }
 .staff-date-trigger:focus-visible { outline-offset: 2px; }
 .owner-agreement { display: flex; align-items: center; gap: 9px; padding: 9px 0; font-weight: 750; }
-.owner-agreement input { width: 18px; height: 18px; accent-color: var(--green); }
+.owner-agreement input { flex: none; width: 18px; height: 18px; accent-color: var(--green); }
 .facility-amenities {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -606,7 +619,6 @@ a.button { display: inline-flex; align-items: center; text-decoration: none; }
     font-size: 1rem;
   }
   .owner-agreement { min-height: 44px; }
-  .owner-agreement input { flex: none; }
   .owner-list-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; width: 100%; }
   .owner-chips li { max-width: 100%; }
   .owner-chips button { min-width: 36px; min-height: 36px; }

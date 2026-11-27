@@ -36,6 +36,7 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    monthlyFeeTermsAcceptedAt: Date,
     // Wallet balance specifically for customer users
     walletBalance: {
       type: Number,
