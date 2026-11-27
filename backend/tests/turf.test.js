@@ -12,14 +12,15 @@ import { User } from '../src/models/User.js';
 import turfRoutes from '../src/routes/turfRoutes.js';
 import publicTurfRoutes from '../src/routes/publicTurfRoutes.js';
 import { razorpayWebhook } from '../src/routes/razorpayWebhook.js';
+import staffRoutes from '../src/routes/staffRoutes.js';
 import { accountPhone } from '../src/services/phone.js';
 
 test('owner registration, setup, isolation, and backend verification', async (t) => {
   const makeId = () => new mongoose.Types.ObjectId().toString();
   const owner = { id: makeId(), email: 'owner-login@example.test', role: 'owner', isActive: true };
   const otherOwner = { id: makeId(), role: 'owner', isActive: true };
-  const customer = { id: makeId(), name: 'Player One', role: 'customer', isActive: true };
-  const otherCustomer = { id: makeId(), role: 'customer', isActive: true };
+  const customer = { id: makeId(), name: 'Player One', phone: '+919123456789', role: 'customer', isActive: true };
+  const otherCustomer = { id: makeId(), name: 'Player Two', phone: '+919234567891', role: 'customer', isActive: true };
   const staff = { id: makeId(), role: 'staff', isActive: true };
   const users = [owner, otherOwner, customer, otherCustomer, staff];
   const turfs = [];
@@ -31,6 +32,12 @@ test('owner registration, setup, isolation, and backend verification', async (t)
   });
   t.mock.method(User, 'createIndexes', async () => []);
   t.mock.method(User, 'findById', async (id) => users.find((user) => user.id === id));
+  t.mock.method(User, 'find', ({ _id }) => ({ select: () => ({ lean: async () => users.filter((user) => _id.$in.includes(user.id))
+    .map((user) => ({ ...user, _id: user.id })) }) }));
+  t.mock.method(User, 'findOne', (query) => ({ select: () => ({ lean: async () => {
+    const user = users.find((candidate) => Object.entries(query).every(([key, value]) => candidate[key] === value));
+    return user && { _id: user.id };
+  } }) }));
   t.mock.method(User, 'create', async (fields) => {
     if (users.some((user) => user.phone === fields.phone || user.email === fields.email)) throw Object.assign(new Error('duplicate'), { code: 11000 });
     const user = { ...fields, id: makeId(), isActive: true };
@@ -82,6 +89,11 @@ test('owner registration, setup, isolation, and backend verification', async (t)
   t.mock.method(Turf, 'findOneAndUpdate', async (query, { $set }) => {
     const turf = find(query);
     if (turf && $set) {
+      if ($set['feedback.$.reply']) {
+        const entry = turf.feedback.find(({ _id }) => _id === query['feedback._id']);
+        Object.assign(entry, { reply: $set['feedback.$.reply'], repliedAt: $set['feedback.$.repliedAt'] });
+        return turf;
+      }
       const { 'policies.cancellation': cancellation, 'policies.payAtVenue': payAtVenue, ...fields } = $set;
       Object.assign(turf, fields);
       if (cancellation || payAtVenue !== undefined) turf.policies = {
@@ -97,6 +109,7 @@ test('owner registration, setup, isolation, and backend verification', async (t)
   app.use(express.json());
   app.use('/owner/turfs', turfRoutes);
   app.use('/turfs', publicTurfRoutes);
+  app.use('/staff', staffRoutes);
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
   t.after(() => server.close());
@@ -136,10 +149,10 @@ test('owner registration, setup, isolation, and backend verification', async (t)
   assert.equal((await request(otherOwner, path + '/media', 'POST', {})).status, 404);
   assert.equal((await request(otherOwner, path + '/media', 'DELETE', { url: 'https://example.test/photo' })).status, 404);
   assert.equal((await request(otherOwner, path + '/staff', 'POST', {})).status, 404);
-  const member = { name: 'Turf staff', email: 'pickturf-fixture@gmail.com', phone: '9876543210' };
+  const member = { name: 'Turf staff', email: 'PickTurf-Staff+Schedule@Example.test', phone: '9876543210' };
   for (const [field, value, expected] of [
     ['name', ' ', /staff name/],
-    ['email', 'staff@example.test', /staff Gmail address/],
+    ['email', 'staff.example.test', /staff email address/],
     ['phone', '123', /staff phone number/],
   ]) {
     const invalidMember = await request(owner, path + '/staff', 'POST', { ...member, [field]: value });
@@ -148,7 +161,9 @@ test('owner registration, setup, isolation, and backend verification', async (t)
   }
   const added = await request(owner, path + '/staff', 'POST', member);
   assert.equal(added.status, 201);
-  const memberId = (await added.json()).member._id;
+  const { member: addedMember } = await added.json();
+  assert.equal(addedMember.email, member.email.toLowerCase());
+  const memberId = addedMember._id;
   assert.equal((await request(owner, path + '/staff', 'POST', { ...member, email: 'another-fixture@gmail.com', phone: '+919876543210' })).status, 409);
   assert.equal((await request(otherOwner, path + '/staff/' + memberId, 'DELETE')).status, 404);
   assert.equal((await request(owner, path + '/staff/' + memberId, 'DELETE')).status, 200);
@@ -214,13 +229,22 @@ test('owner registration, setup, isolation, and backend verification', async (t)
   }]);
   turfs[0].feedback = [{ rating: 5, name: 'Customer', comment: 'My review' }, { rating: 4 }, { comment: 'Unrated' }];
   assert.deepEqual(await publicListings(), [{ ...listed[0], rating: 4.5 }]);
+  const otherListings = [
+    { ...turfs[0], _id: makeId(), name: 'Unrated Turf', feedback: [] },
+    { ...turfs[0], _id: makeId(), name: 'Five Star Turf', feedback: [{ rating: 5 }] },
+    { ...turfs[0], _id: makeId(), name: 'Three Star Turf', feedback: [{ rating: 3 }] },
+  ];
+  turfs.push(...otherListings);
+  assert.deepEqual((await publicListings()).map(({ name }) => name), ['Five Star Turf', 'Updated Turf', 'Three Star Turf', 'Unrated Turf']);
+  turfs.splice(1, otherListings.length);
 
   await t.test('booking access, payment verification and overlapping slot holds', async (bookingTest) => {
     const days = new Map();
     bookingTest.mock.method(BookingDay, 'findById', (key) => ({ lean: async () => days.get(key) }));
     bookingTest.mock.method(BookingDay, 'find', ({ reservations }) => ({ select: () => ({ lean: async () =>
       [...days].filter(([, day]) => day.reservations.some((entry) =>
-        entry.customer === reservations.$elemMatch.customer && entry.status === reservations.$elemMatch.status))
+        entry.customer === reservations.$elemMatch.customer
+        && (!reservations.$elemMatch.status || entry.status === reservations.$elemMatch.status)))
         .map(([_id, day]) => ({ _id, ...day })),
     }) }));
     bookingTest.mock.method(BookingDay, 'updateOne', async ({ _id, reservations }, update) => {
@@ -347,10 +371,26 @@ test('owner registration, setup, isolation, and backend verification', async (t)
     assert.equal((await feedback(owner)).status, 403);
     const earlier = new Date(Date.now() - 172_800_000).toISOString().slice(0, 10);
     const completedId = makeId();
+    const otherExpiredId = makeId();
     days.set(`${turf._id}:${earlier}`, { reservations: [
-      { _id: completedId, customer: customer.id, status: 'confirmed', turfName: 'Updated Turf', startTime: '23:00', endTime: '24:00' },
-      { _id: makeId(), customer: otherCustomer.id, status: 'expired', startTime: '19:00', endTime: '20:00' },
+      { _id: completedId, customer: customer.id, status: 'confirmed', turfName: 'Updated Turf', startTime: '23:00', endTime: '24:00', amount: 15000 },
+      { _id: otherExpiredId, customer: otherCustomer.id, status: 'expired', startTime: '19:00', endTime: '20:00', amount: 15000 },
     ] });
+    const wallet = (user) => fetch(`${origin}/turfs/bookings`, {
+      headers: user ? { Authorization: 'Bearer ' + jwt.sign({ id: user.id }, process.env.JWT_SECRET) } : {},
+    });
+    assert.equal((await wallet()).status, 401);
+    assert.equal((await wallet(owner)).status, 403);
+    const customerHistory = await (await wallet(customer)).json();
+    assert.deepEqual(customerHistory.previous.map(({ id }) => id), [completedId]);
+    assert.equal(customerHistory.previous[0].canReview, true);
+    assert.equal(customerHistory.previous[0].review, null);
+    assert.deepEqual((await (await wallet(otherCustomer)).json()).previous.map(({ id }) => id), [otherExpiredId]);
+    const [active] = (await (await wallet(winner)).json()).current;
+    assert.equal(active.id, pending.id);
+    assert.equal(active.canReview, false);
+    assert.deepEqual(active.equipment, pending.equipment);
+    assert.equal(active.checkoutUrl, undefined);
     assert.deepEqual(await (await feedback(otherCustomer)).json(), { booking: null });
     assert.equal((await (await feedback(customer)).json()).booking.id, completedId);
     assert.equal((await feedback(otherCustomer, earlier, completedId, { rating: 5 })).status, 404);
@@ -361,6 +401,9 @@ test('owner registration, setup, isolation, and backend verification', async (t)
       _id: completedId, customer: customer.id, name: customer.name, rating: 3, comment: 'Good game',
     }]);
     assert.deepEqual(await (await feedback(customer)).json(), { booking: null });
+    const [reviewed] = (await (await wallet(customer)).json()).previous;
+    assert.equal(reviewed.canReview, false);
+    assert.deepEqual(reviewed.review, { rating: 3, comment: 'Good game' });
 
     turfs[0].timeSlots.push({ ...slot, startTime: '06:30', endTime: '07:30' });
     assert.equal((await create(loser, { startTime: '06:30', endTime: '07:30' })).status, 409);
@@ -407,6 +450,63 @@ test('owner registration, setup, isolation, and backend verification', async (t)
       headers: { Authorization: 'Bearer ' + jwt.sign({ id: customer.id }, process.env.JWT_SECRET) },
     });
     assert.deepEqual((await receipt.json()).booking, atVenue);
+    const currentVenue = (await (await wallet(customer)).json()).current.find(({ id }) => id === atVenue.id);
+    assert.equal(currentVenue.paymentMethod, 'venue');
+
+    const activeStaff = users.find(({ id }) => id === memberId);
+    const staffRequest = (user, route, method = 'GET', body) => fetch(`${origin}/staff${route}`, {
+      method, headers: { 'Content-Type': 'application/json',
+        ...(user && { Authorization: 'Bearer ' + jwt.sign({ id: user.id }, process.env.JWT_SECRET) }) },
+      body: body && JSON.stringify(body),
+    });
+    const schedulePath = `/schedule?date=${date}`;
+    assert.equal((await staffRequest(null, schedulePath)).status, 401);
+    assert.equal((await staffRequest(customer, schedulePath)).status, 403);
+    assert.equal((await staffRequest(staff, schedulePath)).status, 403);
+    assert.equal((await staffRequest(activeStaff, '/schedule?date=yesterday')).status, 400);
+    const daily = await (await staffRequest(activeStaff, schedulePath)).json();
+    assert.equal(daily.slots[0].status, 'booked');
+    assert.equal(daily.bookings[0].customerPhone, winner.phone);
+    assert.equal(daily.bookings[0].paymentLinkId, undefined);
+
+    const walkInDate = new Date(Date.now() + 345_600_000).toISOString().slice(0, 10);
+    const walkInDetails = { date: walkInDate, startTime: slot.startTime, endTime: slot.endTime,
+      customerName: 'Walk-in Player', customerPhone: customer.phone };
+    assert.equal((await staffRequest(activeStaff, '/bookings', 'POST', { ...walkInDetails, customerPhone: 'invalid' })).status, 400);
+    const recorded = await staffRequest(activeStaff, '/bookings', 'POST', walkInDetails);
+    assert.equal(recorded.status, 200);
+    const { id: walkInId } = await recorded.json();
+    assert.equal((await (await staffRequest(activeStaff, '/bookings', 'POST', walkInDetails)).json()).id, walkInId);
+    assert.equal((await staffRequest(activeStaff, '/bookings', 'POST', { ...walkInDetails, customerPhone: '+919234567890' })).status, 409);
+    assert.equal((await create(customer, { date: walkInDate })).status, 409);
+    const linkedWalkIn = (await (await wallet(customer)).json()).current.find(({ id }) => id === walkInId);
+    assert.equal(linkedWalkIn.paymentMethod, 'venue');
+    const guestDate = new Date(Date.now() + 432_000_000).toISOString().slice(0, 10);
+    const guestBooking = await staffRequest(activeStaff, '/bookings', 'POST', { ...walkInDetails, date: guestDate, customerPhone: '9234567890' });
+    assert.equal(guestBooking.status, 200);
+    const guestReservation = days.get(`${turf._id}:${guestDate}`).reservations[0];
+    assert.equal(guestReservation.customer, undefined);
+    assert.equal(guestReservation.walkIn.phone, '+919234567890');
+    const managerSchedule = await request(owner, `${path}/schedule?date=${walkInDate}`);
+    assert.equal((await managerSchedule.json()).bookings[0].recordedBy, activeStaff.name);
+    assert.equal((await request(otherOwner, `${path}/schedule?date=${walkInDate}`)).status, 404);
+
+    const feedbackList = await (await staffRequest(activeStaff, '/feedback')).json();
+    assert.ok(feedbackList.feedback.some(({ id }) => id === completedId));
+    const foreignFeedback = makeId();
+    turfs.push({ _id: makeId(), owner: otherOwner.id, feedback: [{ _id: foreignFeedback }] });
+    assert.equal((await staffRequest(activeStaff, `/feedback/${foreignFeedback}/reply`, 'PUT', { reply: 'Wrong turf' })).status, 404);
+    turfs.pop();
+    const sent = await staffRequest(activeStaff, `/feedback/${completedId}/reply`, 'PUT', { reply: 'Thanks for playing!' });
+    assert.equal(sent.status, 200);
+    const reviewedByStaff = (await (await wallet(customer)).json()).previous.find(({ id }) => id === completedId);
+    assert.equal(reviewedByStaff.review.reply, 'Thanks for playing!');
+    const publicReviews = (await details()).turf.feedback;
+    assert.deepEqual(publicReviews[0], { id: completedId, author: 'Player', rating: 3, comment: 'Good game', reply: 'Thanks for playing!' });
+    assert.equal(publicReviews.every((review) => review.rating > 0), true);
+    activeStaff.isActive = false;
+    assert.equal((await staffRequest(activeStaff, schedulePath)).status, 401);
+    activeStaff.isActive = true;
   });
   const dashboard = await (await request(owner)).json();
   assert.equal(dashboard.turfs[0].verificationStatus, 'verified');

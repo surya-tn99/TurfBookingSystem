@@ -2,7 +2,9 @@ import mongoose from 'mongoose';
 
 const { Schema } = mongoose;
 const reservation = new Schema({
-  customer: { type: Schema.Types.ObjectId, required: true },
+  customer: { type: Schema.Types.ObjectId, required() { return !this.walkIn?.phone; } },
+  walkIn: { name: String, phone: String },
+  recordedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   turfName: { type: String, required: true },
   startTime: { type: String, required: true },
   endTime: { type: String, required: true },

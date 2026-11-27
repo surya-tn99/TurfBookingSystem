@@ -5,6 +5,7 @@ import { connectDB } from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
 import publicTurfRoutes from './routes/publicTurfRoutes.js';
 import { razorpayWebhook } from './routes/razorpayWebhook.js';
+import staffRoutes from './routes/staffRoutes.js';
 import turfRoutes from './routes/turfRoutes.js';
 import { checkSupabaseConnection } from './services/storageService.js';
 
@@ -34,6 +35,7 @@ checkSupabaseConnection();
 app.use('/api/auth', authRoutes);
 app.use('/api/turfs', publicTurfRoutes);
 app.use('/api/owner/turfs', turfRoutes);
+app.use('/api/staff', staffRoutes);
 
 // Root Health Check
 app.get('/api/health', (req, res) => {

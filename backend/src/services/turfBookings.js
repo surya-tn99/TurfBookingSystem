@@ -27,7 +27,7 @@ export function pricedSlots(turf) {
 
 const bookablePrice = (amount, payAtVenue) => amount === 0 || (Number.isSafeInteger(amount) && amount >= (payAtVenue ? 0 : 100));
 const paymentMethodFor = ({ paymentMethod, amount }) => paymentMethod ?? (amount === 0 ? 'free' : 'online');
-const overlaps = (left, right) => left.startTime < right.endTime && left.endTime > right.startTime;
+export const overlaps = (left, right) => left.startTime < right.endTime && left.endTime > right.startTime;
 const blocksSlot = (booking) => booking.status === 'pending' || booking.status === 'confirmed';
 const conflict = () => Object.assign(new Error('This slot is no longer available. Please choose another slot.'), { status: 409 });
 const byId = (day, id) => day?.reservations.find((booking) => String(booking._id) === String(id));
@@ -82,7 +82,7 @@ async function refreshPending(dayKey, booking) {
   return applyPaymentLink(dayKey, booking, await findPaymentLink(booking));
 }
 
-async function currentReservations(dayKey, slots) {
+export async function currentReservations(dayKey, slots) {
   const day = await BookingDay.findById(dayKey).lean();
   const reservations = (day?.reservations ?? []).filter(blocksSlot);
   return Promise.all(reservations.map(async (booking) => {
@@ -113,7 +113,32 @@ export function bookingSummary(booking, date) {
   const { _id, turfName, startTime, endTime, amount, slotAmount = amount, equipment = [], status, expiresAt, checkoutUrl } = booking;
   return { id: _id, turfName, date, startTime, endTime, amount, slotAmount, equipment, status, expiresAt,
     paymentMethod: paymentMethodFor(booking),
-    checkoutUrl: status === 'pending' && expiresAt.getTime() > Date.now() ? checkoutUrl ?? null : null };
+    checkoutUrl: status === 'pending' && expiresAt?.getTime() > Date.now() ? checkoutUrl ?? null : null };
+}
+
+export async function customerReservations(customer, status) {
+  const filter = { customer, ...(status && { status }) };
+  const days = await BookingDay.find({ reservations: { $elemMatch: filter } }).select('reservations').lean();
+  return days.flatMap(({ _id, reservations }) => {
+    const [turfId, date] = _id.split(':');
+    return reservations.filter((booking) => String(booking.customer) === String(customer) && (!status || booking.status === status))
+      .map((booking) => ({ ...booking, turfId, date }));
+  });
+}
+
+export async function reserveSlot(dayKey, booking) {
+  try {
+    await BookingDay.updateOne({ _id: dayKey }, { $setOnInsert: { _id: dayKey } }, { upsert: true });
+  } catch (error) {
+    if (error.code !== 11000) throw error;
+  }
+  const acquired = await BookingDay.updateOne({
+    _id: dayKey, reservations: { $not: { $elemMatch: {
+      status: { $in: ['pending', 'confirmed'] }, startTime: { $lt: booking.endTime }, endTime: { $gt: booking.startTime },
+    } } },
+  }, { $push: { reservations: booking } });
+  if (acquired.modifiedCount !== 1) throw conflict();
+  return booking;
 }
 
 export async function startBooking(turf, customer, date, choice, clientOrigin) {
@@ -165,17 +190,7 @@ export async function startBooking(turf, customer, date, choice, clientOrigin) {
   const expiresAt = needsOnlinePayment ? new Date(Math.min(now + holdSeconds * 1_000, slotTimestamp(date, slot.startTime))) : undefined;
   const booking = { _id: new Types.ObjectId(), customer, turfName: turf.name, startTime: slot.startTime,
     endTime: slot.endTime, slotAmount, equipment, amount, paymentMethod, status: needsOnlinePayment ? 'pending' : 'confirmed', expiresAt };
-  try {
-    await BookingDay.updateOne({ _id: dayKey }, { $setOnInsert: { _id: dayKey } }, { upsert: true });
-  } catch (error) {
-    if (error.code !== 11000) throw error;
-  }
-  const acquired = await BookingDay.updateOne({
-    _id: dayKey, reservations: { $not: { $elemMatch: {
-      status: { $in: ['pending', 'confirmed'] }, startTime: { $lt: slot.endTime }, endTime: { $gt: slot.startTime },
-    } } },
-  }, { $push: { reservations: booking } });
-  if (acquired.modifiedCount !== 1) throw conflict();
+  await reserveSlot(dayKey, booking);
   if (!needsOnlinePayment) return booking;
 
   const callback = new URL(`/turfs/${turfId}`, origin);

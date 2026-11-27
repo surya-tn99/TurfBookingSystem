@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { turfRequest } from '../turfApi';
 
-function FeedbackForm({ booking, token, dismiss, onSaved }) {
+export function BookingFeedbackForm({ booking, token, dismiss, dismissLabel = 'Cancel', onSaved }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const request = useRef(null);
@@ -28,27 +28,23 @@ function FeedbackForm({ booking, token, dismiss, onSaved }) {
     }
   }
 
-  return <section className="frame owner-panel feedback-prompt" aria-labelledby="booking-feedback-title">
-    <h2 id="booking-feedback-title">How was your game?</h2>
-    <p><strong>{booking.turfName}</strong> · {booking.date} · {booking.startTime}–{booking.endTime} IST</p>
-    <form className="owner-form" onSubmit={submit}>
-      <fieldset className="owner-form-fields" disabled={busy}>
-        <legend>Rate your visit</legend>
-        <div className="feedback-ratings">
-          {[1, 2, 3, 4, 5].map((rating) => <label key={rating}>
-            <input type="radio" name="rating" value={rating} required aria-label={`${rating} out of 5 stars`} />
-            <span aria-hidden="true">{rating} ★</span>
-          </label>)}
-        </div>
-        <label>Comment (optional)<textarea name="comment" rows="3" maxLength="1000" /></label>
-      </fieldset>
-      {error && <p className="auth-error" role="alert">{error}</p>}
-      <div className="owner-actions">
-        <button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Sending…' : 'Send feedback'}</button>
-        <button type="button" className="button button-outline" disabled={busy} onClick={dismiss}>Not now</button>
+  return <form className="owner-form feedback-form" onSubmit={submit}>
+    <fieldset className="owner-form-fields" disabled={busy}>
+      <legend>Rate your visit</legend>
+      <div className="feedback-ratings">
+        {[1, 2, 3, 4, 5].map((rating) => <label className="feedback-star" key={rating}>
+          <input type="radio" name="rating" value={rating} required aria-label={`${rating} out of 5 stars`} />
+          <span aria-hidden="true" />
+        </label>)}
       </div>
-    </form>
-  </section>;
+      <label>Comment<textarea name="comment" rows="3" maxLength="1000" /></label>
+    </fieldset>
+    {error && <p className="auth-error" role="alert">{error}</p>}
+    <div className="owner-actions">
+      <button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Sending…' : 'Send feedback'}</button>
+      <button type="button" className="button button-outline" disabled={busy} onClick={dismiss}>{dismissLabel}</button>
+    </div>
+  </form>;
 }
 
 export default function BookingFeedback({ token, visible }) {
@@ -87,5 +83,10 @@ export default function BookingFeedback({ token, visible }) {
     setHandled((previous) => new Set([...previous, booking.id]));
     setSaved(wasSaved);
   }
-  return <FeedbackForm key={booking.id} booking={booking} token={token} dismiss={() => finish(false)} onSaved={() => finish(true)} />;
+  return <section className="frame owner-panel feedback-prompt" aria-labelledby="booking-feedback-title">
+    <h2 id="booking-feedback-title">How was your game?</h2>
+    <p><strong>{booking.turfName}</strong> · {booking.date} · {booking.startTime}–{booking.endTime} IST</p>
+    <BookingFeedbackForm key={booking.id} booking={booking} token={token} dismissLabel="Not now"
+      dismiss={() => finish(false)} onSaved={() => finish(true)} />
+  </section>;
 }

@@ -5,9 +5,10 @@ import { Dropdown } from './Dropdown';
 import NameTooltip from './NameTooltip';
 import Skeleton from './Skeleton';
 import TurfPhotoSlideshow from './TurfPhotoSlideshow';
+import TurfSchedule from './TurfSchedule';
 import TurfSetup from './TurfSetup';
 
-const sections = [['revenue', 'Revenue'], ['pricing', 'Pricing and slots'], ['staff', 'Staff'], ['feedback', 'Customer feedback'], ['facilities', 'Facilities and photos']];
+const sections = [['revenue', 'Revenue'], ['bookings', 'Bookings'], ['pricing', 'Pricing and slots'], ['staff', 'Staff'], ['feedback', 'Customer feedback'], ['facilities', 'Facilities and photos']];
 
 function Staff({ id }) {
   const [staff, setStaff] = useState(null);
@@ -50,7 +51,7 @@ function Staff({ id }) {
     }}>
       <div className="owner-fields">
         <label>Staff name<input name="name" maxLength={100} required /></label>
-        <label>Gmail address<input name="email" type="email" required /></label>
+        <label>Email address<input name="email" type="email" maxLength={254} required /></label>
         <label>Phone number<input name="phone" type="tel" required /></label>
       </div>
       <button className="button button-primary" disabled={busy || (staff === null && !error)}>Add staff member</button>
@@ -76,7 +77,7 @@ function Staff({ id }) {
   </section>;
 }
 
-export default function TurfDetails({ id, ownerEmail, navigate }) {
+export default function TurfDetails({ id, ownerEmail, token, navigate }) {
   const [turf, setTurf] = useState(null);
   const [section, setSection] = useState('revenue');
   const [editing, setEditing] = useState(false);
@@ -178,6 +179,7 @@ export default function TurfDetails({ id, ownerEmail, navigate }) {
     <Dropdown className="turf-section-picker" label="Section" value={section} onChange={setSection}
       options={sections.map(([value, label]) => ({ value, label }))} />
     {section === 'revenue' && <section className="owner-panel"><h2>Revenue</h2><p>Revenue will appear here once bookings and payments are enabled.</p></section>}
+    {section === 'bookings' && <TurfSchedule endpoint={`/owner/turfs/${id}`} token={token} />}
     {section === 'pricing' && <TurfSetup id={id} navigate={navigate} section="pricing" onSaved={setTurf} />}
     {section === 'facilities' && <TurfSetup
       id={id}

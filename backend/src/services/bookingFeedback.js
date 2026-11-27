@@ -1,27 +1,33 @@
+import { isObjectIdOrHexString } from 'mongoose';
 import { BookingDay } from '../models/BookingDay.js';
 import { Turf } from '../models/Turf.js';
-import { bookingDayKey, slotTimestamp } from './turfBookings.js';
+import { bookingDayKey, customerReservations, slotTimestamp } from './turfBookings.js';
 
 const matchesCustomer = (booking, customer) => booking.status === 'confirmed' && String(booking.customer) === String(customer);
 const ended = (booking, date, now) => slotTimestamp(date, booking.endTime) <= now;
 
-export async function pendingBookingFeedback(customer) {
-  const days = await BookingDay.find({ reservations: { $elemMatch: { customer, status: 'confirmed' } } })
-    .select('reservations._id reservations.customer reservations.turfName reservations.startTime reservations.endTime reservations.status').lean();
-  const now = Date.now();
-  const due = days.flatMap(({ _id, reservations }) => {
-    const [turfId, date] = _id.split(':');
-    return reservations.filter((booking) => matchesCustomer(booking, customer) && ended(booking, date, now))
-      .map((booking) => ({ turfId, date, id: String(booking._id), turfName: booking.turfName,
-        startTime: booking.startTime, endTime: booking.endTime }));
-  });
-  if (!due.length) return null;
+export async function bookingReviews(bookings) {
+  if (!bookings.length) return new Map();
+  const turfIds = [...new Set(bookings.map(({ turfId }) => turfId))];
+  const bookingIds = new Set(bookings.map(({ _id }) => String(_id)));
+  const turfs = await Turf.find({ _id: { $in: turfIds } }).select('removedAt feedback._id feedback.rating feedback.comment feedback.reply').lean();
+  return new Map(turfs.map((turf) => [String(turf._id), {
+    available: !turf.removedAt,
+    reviews: new Map((turf.feedback ?? []).filter(({ _id }) => bookingIds.has(String(_id)))
+      .map(({ _id, rating, comment, reply }) => [String(_id), { rating, comment, ...(reply && { reply }) }])),
+  }]));
+}
 
-  const turfIds = [...new Set(due.map(({ turfId }) => turfId))];
-  const turfs = await Turf.find({ _id: { $in: turfIds }, removedAt: null }).select('feedback._id').lean();
-  const reviewed = new Map(turfs.map((turf) => [String(turf._id), new Set((turf.feedback ?? []).map(({ _id }) => String(_id)))]));
-  return due.sort((a, b) => `${b.date}T${b.endTime}`.localeCompare(`${a.date}T${a.endTime}`))
-    .find(({ turfId, id }) => reviewed.has(turfId) && !reviewed.get(turfId).has(id)) ?? null;
+export async function pendingBookingFeedback(customer) {
+  const bookings = await customerReservations(customer, 'confirmed');
+  const now = Date.now();
+  const due = bookings.filter((booking) => ended(booking, booking.date, now));
+  const reviewed = await bookingReviews(due);
+  const next = due.sort((a, b) => `${b.date}T${b.endTime}`.localeCompare(`${a.date}T${a.endTime}`))
+    .find(({ turfId, _id }) => reviewed.get(turfId)?.available && !reviewed.get(turfId).reviews.has(String(_id)));
+  if (!next) return null;
+  const { _id, turfId, date, turfName, startTime, endTime } = next;
+  return { id: String(_id), turfId, date, turfName, startTime, endTime };
 }
 
 export async function saveBookingFeedback({ turfId, date, bookingId, user, rating, comment = '' }) {
@@ -48,4 +54,16 @@ export async function saveBookingFeedback({ turfId, date, bookingId, user, ratin
     throw Object.assign(new Error('Turf not found.'), { status: 404 });
   }
   return result.modifiedCount > 0;
+}
+export async function replyToFeedback(turfQuery, feedbackId, value) {
+  const missing = () => Object.assign(new Error('Feedback not found.'), { status: 404 });
+  if (!isObjectIdOrHexString(feedbackId)) throw missing();
+  const reply = typeof value === 'string' ? value.trim() : '';
+  if (!reply || reply.length > 2000) {
+    throw Object.assign(new Error('Enter a reply of up to 2,000 characters.'), { status: 400 });
+  }
+  const turf = await Turf.findOneAndUpdate({ ...turfQuery, 'feedback._id': feedbackId },
+    { $set: { 'feedback.$.reply': reply, 'feedback.$.repliedAt': new Date() } }, { returnDocument: 'after' });
+  if (!turf) throw missing();
+  return turf;
 }

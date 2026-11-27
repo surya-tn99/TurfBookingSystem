@@ -35,13 +35,15 @@ const isMap = ({ hostname, pathname }) => hostname === 'maps.app.goo.gl'
   || hostname === 'maps.google.com' || (['google.com', 'www.google.com', 'google.co.in', 'www.google.co.in'].includes(hostname) && pathname.startsWith('/maps'))
   || (hostname === 'goo.gl' && pathname.startsWith('/maps/'));
 
+export const validEmail = (email) => email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
 export function turfContact(input) {
   const name = string(input.name, 100);
   const contactPhone = string(input.contactPhone, 32).replace(/[\s()-]/g, '');
   const contactEmail = string(input.contactEmail, 254).toLowerCase();
   if (!name) invalid('Enter the turf name.');
   if (!/^\+?\d{8,15}$/.test(contactPhone)) invalid('Enter a valid contact phone number.');
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) invalid('Enter a valid contact email.');
+  if (!validEmail(contactEmail)) invalid('Enter a valid contact email.');
   return { name, contactPhone, contactEmail };
 }
 

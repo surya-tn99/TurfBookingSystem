@@ -4,6 +4,7 @@ import { databaseReady, isDatabaseUnavailable } from '../config/db.js';
 import { authorize, protect } from '../middleware/authMiddleware.js';
 import { Turf } from '../models/Turf.js';
 import { pendingBookingFeedback, saveBookingFeedback } from '../services/bookingFeedback.js';
+import { customerBookingHistory } from '../services/bookingHistory.js';
 import { bookingDayKey, bookingSummary, customerBooking, dailySlots, pricedSlots, startBooking, validBookingDate } from '../services/turfBookings.js';
 import { rentalOptions } from '../services/turfEquipment.js';
 import { syncPendingVerifications } from '../services/turfVerificationService.js';
@@ -13,6 +14,7 @@ const router = express.Router();
 const readyForListing = { removedAt: null, isConfigured: true };
 const listingFields = 'name address.street address.area address.city address.state sports media.images feedback.rating timeSlots';
 const venueFields = `${listingFields} policies.payAtVenue equipment facilities.venueType facilities.parking.available facilities.parking.twoWheelerCapacity facilities.parking.fourWheelerCapacity facilities.restrooms.available facilities.restrooms.changingRoomCount facilities.floodlights.available facilities.drinkingWater facilities.cafeteria facilities.seatingArea facilities.coveredRoof`;
+const feedbackFields = 'feedback._id feedback.name feedback.comment feedback.reply';
 const missing = (res) => res.status(404).json({ message: 'Turf not found.' });
 const invalidDate = (res) => res.status(400).json({ message: 'Choose a valid booking date.' });
 
@@ -20,11 +22,13 @@ function unavailable(res) {
   return res.status(503).json({ message: 'Turf listings are temporarily unavailable.' });
 }
 
+const validRating = (rating) => Number.isFinite(rating) && rating >= 1 && rating <= 5;
+
 function publicListing(turf) {
   const slots = pricedSlots(turf);
   if (!slots.length) return null;
   const ratings = (turf.feedback ?? []).map(({ rating }) => rating)
-    .filter((rating) => Number.isFinite(rating) && rating >= 1 && rating <= 5);
+    .filter(validRating);
 
   return {
     id: String(turf._id),
@@ -39,6 +43,16 @@ function publicListing(turf) {
     slotCount: slots.length,
     startingPrice: Math.min(...slots.map(({ price }) => price)),
   };
+}
+
+function publicFeedback(turf) {
+  return (turf.feedback ?? []).filter(({ rating }) => validRating(rating)).reverse().map(({ _id, name, rating, comment, reply }) => ({
+    id: _id,
+    author: name?.trim().split(/\s+/, 1)[0] || 'Customer',
+    rating,
+    comment,
+    reply,
+  }));
 }
 
 function venueInformation(turf) {
@@ -77,10 +91,10 @@ function handle(handler) {
   };
 }
 
-async function verifiedTurf(id) {
+async function verifiedTurf(id, fields = venueFields) {
   const query = { ...readyForListing, _id: id };
   await syncPendingVerifications(query);
-  return Turf.findOne({ ...query, verificationStatus: 'verified' }).select(venueFields).lean();
+  return Turf.findOne({ ...query, verificationStatus: 'verified' }).select(fields).lean();
 }
 
 router.param('id', (req, res, next, id) => isObjectIdOrHexString(id) ? next() : missing(res));
@@ -89,16 +103,8 @@ router.get('/', handle(async (req, res) => {
   await syncPendingVerifications(readyForListing);
   const turfs = await Turf.find({ ...readyForListing, verificationStatus: 'verified' })
     .select(listingFields).sort({ createdAt: -1 }).lean();
-  return res.json({ turfs: turfs.map(publicListing).filter(Boolean) });
-}));
-
-router.get('/:id', handle(async (req, res) => {
-  const date = req.query.date;
-  if (!validBookingDate(date)) return invalidDate(res);
-  const turf = await verifiedTurf(req.params.id);
-  const listing = turf && publicListing(turf);
-  if (!listing) return missing(res);
-  return res.json({ turf: { ...listing, ...venueInformation(turf) }, slots: await dailySlots(turf, date) });
+  const listings = turfs.map(publicListing).filter(Boolean).sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+  return res.json({ turfs: listings });
 }));
 
 const customerOnly = [requireAuthService, protect, authorize('customer'), (req, res, next) => {
@@ -108,6 +114,18 @@ const customerOnly = [requireAuthService, protect, authorize('customer'), (req, 
 
 router.get('/feedback/pending', customerOnly, handle(async (req, res) =>
   res.json({ booking: await pendingBookingFeedback(req.user.id) })));
+
+router.get('/bookings', customerOnly, handle(async (req, res) =>
+  res.json(await customerBookingHistory(req.user.id))));
+
+router.get('/:id', handle(async (req, res) => {
+  const date = req.query.date;
+  if (!validBookingDate(date)) return invalidDate(res);
+  const turf = await verifiedTurf(req.params.id, `${venueFields} ${feedbackFields}`);
+  const listing = turf && publicListing(turf);
+  if (!listing) return missing(res);
+  return res.json({ turf: { ...listing, ...venueInformation(turf), feedback: publicFeedback(turf) }, slots: await dailySlots(turf, date) });
+}));
 
 router.post('/:id/bookings', customerOnly, handle(async (req, res) => {
   const date = req.body?.date;

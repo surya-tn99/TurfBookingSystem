@@ -6,9 +6,12 @@ import { authUnavailable } from '../controllers/authController.js';
 import { authorize, protect } from '../middleware/authMiddleware.js';
 import { Turf } from '../models/Turf.js';
 import { User } from '../models/User.js';
+import { replyToFeedback } from '../services/bookingFeedback.js';
 import { accountPhone } from '../services/phone.js';
+import { staffSchedule } from '../services/staffBookings.js';
 import { removePhotos, storageError, turfStorage, uploadPhoto } from '../services/storageService.js';
-import { configuration, registration, turfContact } from '../services/turfValidation.js';
+import { configuration, registration, turfContact, validEmail } from '../services/turfValidation.js';
+import { validBookingDate } from '../services/turfBookings.js';
 import { scheduleTurfVerification, syncPendingVerifications } from '../services/turfVerificationService.js';
 import { requireAuthService } from './authRoutes.js';
 
@@ -121,8 +124,8 @@ router.post('/:id/staff', handle(async (req, res) => {
   if (!trimmedName || trimmedName.length > 100) {
     return res.status(400).json({ message: 'Enter a staff name between 1 and 100 characters.' });
   }
-  if (normalizedEmail.length > 254 || !/^[^\s@]+@gmail\.com$/.test(normalizedEmail)) {
-    return res.status(400).json({ message: 'Enter a valid staff Gmail address ending in @gmail.com.' });
+  if (!validEmail(normalizedEmail)) {
+    return res.status(400).json({ message: 'Enter a valid staff email address.' });
   }
   if (!normalizedPhone) {
     return res.status(400).json({ message: 'Enter a valid staff phone number. Use 10 digits for India or include the country code.' });
@@ -157,13 +160,14 @@ router.delete('/:id/staff/:memberId', handle(async (req, res) => {
   return member ? res.json({ memberId }) : res.status(404).json({ message: 'Staff member not found.' });
 }));
 
-router.put('/:id/feedback/:feedbackId/reply', handle(async (req, res) => {
-  if (!isObjectIdOrHexString(req.params.feedbackId)) return res.status(404).json({ message: 'Feedback not found.' });
-  const reply = typeof req.body?.reply === 'string' ? req.body.reply.trim() : '';
-  if (!reply || reply.length > 2000) return res.status(400).json({ message: 'Enter a reply of up to 2,000 characters.' });
-  const turf = await Turf.findOneAndUpdate({ ...owned(req), 'feedback._id': req.params.feedbackId },
-    { $set: { 'feedback.$.reply': reply, 'feedback.$.repliedAt': new Date() } }, { returnDocument: 'after' });
-  return turf ? res.json({ turf }) : res.status(404).json({ message: 'Feedback not found.' });
+router.put('/:id/feedback/:feedbackId/reply', handle(async (req, res) =>
+  res.json({ turf: await replyToFeedback(owned(req), req.params.feedbackId, req.body?.reply) })));
+
+router.get('/:id/schedule', handle(async (req, res) => {
+  if (!validBookingDate(req.query.date)) return res.status(400).json({ message: 'Choose a valid booking date.' });
+  const turf = await Turf.findOne(owned(req)).select('name timeSlots').lean();
+  if (!turf) return missing(res);
+  return res.json(await staffSchedule(turf, req.query.date));
 }));
 
 router.put('/:id/configure', handle(async (req, res) => {

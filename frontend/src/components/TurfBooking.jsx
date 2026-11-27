@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { authPageHref } from '../auth';
-import { turfRequest } from '../turfApi';
+import { bookingPrice as price, turfRequest } from '../turfApi';
+import { useTurfRequest } from '../useTurfRequest';
 import AppLink from './AppLink';
+import ReviewStars from './ReviewStars';
 import Skeleton from './Skeleton';
 import TurfPhotoSlideshow from './TurfPhotoSlideshow';
 
@@ -9,8 +11,6 @@ const indiaDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', y
 const dateLabel = new Intl.DateTimeFormat('en-IN', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' });
 const dayMs = 86_400_000;
 const datesInRow = 7;
-const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 });
-const price = (amount) => amount === 0 ? 'Free' : currency.format(amount / 100);
 const venueTypes = { outdoor: 'Outdoor', indoor: 'Indoor', hybrid: 'Indoor and outdoor' };
 const facilityNames = {
   restrooms: 'Restrooms', changingRooms: 'Changing rooms', floodlights: 'Floodlights',
@@ -83,20 +83,16 @@ function VenueInformation({ turf }) {
   </section>;
 }
 
-function useTurfRequest(path, token) {
-  const [result, setResult] = useState(null);
-  const [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    const controller = new AbortController();
-    turfRequest(path, { token, signal: controller.signal }).then((data) => {
-      if (!controller.signal.aborted) setResult({ path, data });
-    }).catch((error) => {
-      if (!controller.signal.aborted) setResult({ path, error });
-    });
-    return () => controller.abort();
-  }, [path, token, attempt]);
-  return { ...(result?.path === path && result), previousData: result?.data,
-    reload() { setResult(null); setAttempt((count) => count + 1); } };
+function TurfFeedback({ feedback = [] }) {
+  return <section className="owner-panel booking-panel" aria-labelledby="turf-feedback-title">
+    <h2 id="turf-feedback-title">Customer feedback</h2>
+    {feedback.length === 0 && <p className="account-note">No customer feedback yet.</p>}
+    {feedback.map((review, index) => <article className="turf-review" key={review.id ?? index}>
+      <div className="wallet-booking-heading"><strong>{review.author}</strong><ReviewStars rating={review.rating} /></div>
+      {review.comment && <p>{review.comment}</p>}
+      {review.reply && <div className="turf-review-reply"><strong>Turf reply</strong><p>{review.reply}</p></div>}
+    </article>)}
+  </section>;
 }
 
 function BookingStatus({ path, date, id, token, navigate }) {
@@ -226,6 +222,7 @@ function BookingFlow({ path, date, today, slotStart, checkout, initialRentals, u
         <AppLink className="button button-primary" href={returnTo} navigate={changeStep}>Continue to equipment</AppLink>
       </div>}
     </section>
+    {turf && <TurfFeedback feedback={turf.feedback} />}
   </>;
 
   const changeSlot = <AppLink className="button button-outline" href={slotHref} navigate={changeStep}>Change date or slot</AppLink>;
