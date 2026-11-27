@@ -1,11 +1,19 @@
 import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import { isDatabaseUnavailable } from '../config/db.js';
+import { Turf } from '../models/Turf.js';
 import { User } from '../models/User.js';
+import { withActiveAccount } from '../services/accountActivity.js';
 import { accountPhone } from '../services/phone.js';
+import { customerReservations, isCurrentBooking } from '../services/turfBookings.js';
 
 const googleClient = new OAuth2Client();
 const signupRoles = ['customer', 'owner'];
+
+function accountName(value) {
+  const name = typeof value === 'string' ? value.trim() : '';
+  return name.length <= 100 ? name : '';
+}
 
 function accountProfile(user) {
   return {
@@ -117,9 +125,9 @@ export function getMe(req, res) {
 
 export async function completeProfile(req, res, next) {
   const { name, phone } = req.body ?? {};
-  const fullName = typeof name === 'string' ? name.trim() : '';
+  const fullName = accountName(name);
   const normalizedPhone = accountPhone(phone);
-  if (!fullName || fullName.length > 100) {
+  if (!fullName) {
     return res.status(400).json({ success: false, message: 'Enter a name between 1 and 100 characters.' });
   }
   if (!normalizedPhone) {
@@ -141,6 +149,64 @@ export async function completeProfile(req, res, next) {
     if (error.code === 11000 && error.keyPattern?.phone) {
       return res.status(409).json({ message: 'This phone number is already used by a PickTurf account.' });
     }
+    if (isDatabaseUnavailable(error)) return authUnavailable(res);
+    return next(error);
+  }
+}
+
+export async function updateProfile(req, res, next) {
+  if (req.user.needsProfile) return res.status(403).json({ message: 'Complete your profile first.' });
+  const { name, phone } = req.body ?? {};
+  const changes = {};
+  if (name !== undefined) {
+    changes.name = accountName(name);
+    if (!changes.name) return res.status(400).json({ message: 'Enter a name between 1 and 100 characters.' });
+  }
+  if (phone !== undefined) {
+    changes.phone = accountPhone(phone);
+    if (!changes.phone) return res.status(400).json({ message: 'Enter a 10-digit Indian phone number or include the country code.' });
+  }
+  if (!Object.keys(changes).length) return res.status(400).json({ message: 'Enter a name or phone number to update.' });
+
+  try {
+    const user = await User.findOneAndUpdate(
+      { _id: req.user.id, role: req.user.role, isActive: true },
+      { $set: changes },
+      { returnDocument: 'after', runValidators: true },
+    );
+    if (!user) return res.status(401).json({ message: 'User not found or inactive.' });
+    return res.json({ success: true, user: accountProfile(user) });
+  } catch (error) {
+    if (error.code === 11000 && error.keyPattern?.phone) {
+      return res.status(409).json({ message: 'This phone number is already used by a PickTurf account.' });
+    }
+    if (isDatabaseUnavailable(error)) return authUnavailable(res);
+    return next(error);
+  }
+}
+
+export async function deleteAccount(req, res, next) {
+  if (req.body?.confirm !== true) return res.status(400).json({ message: 'Confirm that you want to delete your account.' });
+  const { id, role } = req.user;
+  const blocked = (message) => Object.assign(new Error(message), { status: 409 });
+  try {
+    await withActiveAccount(id, role, async (session) => {
+      if (role === 'owner') {
+        if (await Turf.exists({ owner: id, removedAt: null }, { session })) {
+          throw blocked('Remove all your registered turfs from Dashboard before deleting your account.');
+        }
+      } else {
+        const bookings = await customerReservations(id, null, session);
+        const now = Date.now();
+        if (bookings.some((booking) => isCurrentBooking(booking, now))) {
+          throw blocked('Cancel your active bookings or resolve any pending payments in Wallet before deleting your account.');
+        }
+      }
+      await User.deleteOne({ _id: id, role, isActive: true }, { session });
+    });
+    return res.status(204).end();
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
     if (isDatabaseUnavailable(error)) return authUnavailable(res);
     return next(error);
   }

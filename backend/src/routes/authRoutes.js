@@ -1,7 +1,7 @@
 import express from 'express';
 import { databaseReady } from '../config/db.js';
-import { authUnavailable, completeProfile, googleAuth, getMe } from '../controllers/authController.js';
-import { protect } from '../middleware/authMiddleware.js';
+import { authUnavailable, completeProfile, deleteAccount, googleAuth, getMe, updateProfile } from '../controllers/authController.js';
+import { authorize, protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -13,6 +13,9 @@ export function requireAuthService(req, res, next) {
 
 router.post('/google', requireAuthService, googleAuth);
 router.get('/me', requireAuthService, protect, getMe);
-router.patch('/me', requireAuthService, protect, completeProfile);
+const canEditProfile = [requireAuthService, protect, authorize('customer', 'owner')];
+router.patch('/me', canEditProfile, completeProfile);
+router.patch('/me/profile', canEditProfile, updateProfile);
+router.delete('/me', canEditProfile, deleteAccount);
 
 export default router;

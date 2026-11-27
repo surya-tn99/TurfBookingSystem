@@ -58,6 +58,7 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    accountActivityVersion: { type: Number, default: 0 },
   },
   {
     timestamps: true,

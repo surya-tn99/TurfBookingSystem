@@ -3,6 +3,7 @@ import { isObjectIdOrHexString } from 'mongoose';
 import { databaseReady, isDatabaseUnavailable } from '../config/db.js';
 import { authorize, protect } from '../middleware/authMiddleware.js';
 import { Turf } from '../models/Turf.js';
+import { cancelCustomerBooking } from '../services/bookingCancellation.js';
 import { pendingBookingFeedback, saveBookingFeedback } from '../services/bookingFeedback.js';
 import { customerBookingHistory } from '../services/bookingHistory.js';
 import { bookingDayKey, bookingSummary, customerBooking, dailySlots, pricedSlots, startBooking, validBookingDate } from '../services/turfBookings.js';
@@ -144,6 +145,15 @@ router.get('/:id/bookings/:date/:bookingId', customerOnly, handle(async (req, re
   }
   const booking = await customerBooking(bookingDayKey(id, date), bookingId, req.user.id);
   return booking ? res.json({ booking: bookingSummary(booking, date) }) : res.status(404).json({ message: 'Booking not found.' });
+}));
+
+router.patch('/:id/bookings/:date/:bookingId/cancel', customerOnly, handle(async (req, res) => {
+  const { id, date, bookingId } = req.params;
+  if (!validBookingDate(date) || !isObjectIdOrHexString(bookingId)) {
+    return res.status(404).json({ message: 'Booking not found.' });
+  }
+  const booking = await cancelCustomerBooking(id, date, bookingId.toLowerCase(), req.user.id);
+  return res.json({ booking: bookingSummary(booking, date) });
 }));
 
 router.post('/:id/bookings/:date/:bookingId/feedback', customerOnly, handle(async (req, res) => {

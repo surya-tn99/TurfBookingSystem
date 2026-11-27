@@ -1,10 +1,10 @@
 import { useId, useRef, useState } from 'react';
-import { staffPath } from '../auth';
+import { profileSettingsPath, staffPath } from '../auth';
 import AppLink from './AppLink';
 import { managerPath } from '../ownerApi';
 import { useTextOverflow } from '../useTextOverflow';
 
-export default function UserMenu({ name, onLogout, isOwner, isCustomer, isStaff, navigate }) {
+export default function UserMenu({ name, onLogout, isOwner, showProfile, isStaff, navigate }) {
   const [open, setOpen] = useState(false);
   const controls = useId();
   const trigger = useRef(null);
@@ -56,7 +56,7 @@ export default function UserMenu({ name, onLogout, isOwner, isCustomer, isStaff,
       <div ref={popover} className="user-menu-popover" id={controls} hidden={!open}>
         {overflowing && <span className="user-menu-full-name" aria-hidden="true">{name}</span>}
         {isOwner && <AppLink className="button button-outline" href={managerPath} navigate={openPage}>Dashboard</AppLink>}
-        {isCustomer && <AppLink className="button button-outline" href="/wallet" navigate={openPage}>Wallet</AppLink>}
+        {showProfile && <AppLink className="button button-outline" href={profileSettingsPath} navigate={openPage}>Profile</AppLink>}
         {isStaff && <AppLink className="button button-outline" href={staffPath} navigate={openPage}>Staff dashboard</AppLink>}
         <button className="button button-outline" type="button" onClick={onLogout}>Log out</button>
       </div>

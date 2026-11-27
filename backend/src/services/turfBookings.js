@@ -1,5 +1,6 @@
 import { Types } from 'mongoose';
 import { BookingDay } from '../models/BookingDay.js';
+import { withActiveAccount } from './accountActivity.js';
 import { createPaymentLink, findPaymentLink, paymentConfigured, paymentUnavailable } from './razorpay.js';
 import { selectedRentals } from './turfEquipment.js';
 
@@ -29,6 +30,7 @@ const bookablePrice = (amount, payAtVenue) => amount === 0 || (Number.isSafeInte
 const paymentMethodFor = ({ paymentMethod, amount }) => paymentMethod ?? (amount === 0 ? 'free' : 'online');
 export const overlaps = (left, right) => left.startTime < right.endTime && left.endTime > right.startTime;
 const blocksSlot = (booking) => booking.status === 'pending' || booking.status === 'confirmed';
+export const isCurrentBooking = (booking, now) => blocksSlot(booking) && slotTimestamp(booking.date, booking.endTime) > now;
 const conflict = () => Object.assign(new Error('This slot is no longer available. Please choose another slot.'), { status: 409 });
 const byId = (day, id) => day?.reservations.find((booking) => String(booking._id) === String(id));
 
@@ -116,9 +118,9 @@ export function bookingSummary(booking, date) {
     checkoutUrl: status === 'pending' && expiresAt?.getTime() > Date.now() ? checkoutUrl ?? null : null };
 }
 
-export async function customerReservations(customer, status) {
+export async function customerReservations(customer, status, session) {
   const filter = { customer, ...(status && { status }) };
-  const days = await BookingDay.find({ reservations: { $elemMatch: filter } }).select('reservations').lean();
+  const days = await BookingDay.find({ reservations: { $elemMatch: filter } }, 'reservations', { session }).lean();
   return days.flatMap(({ _id, reservations }) => {
     const [turfId, date] = _id.split(':');
     return reservations.filter((booking) => String(booking.customer) === String(customer) && (!status || booking.status === status))
@@ -132,12 +134,16 @@ export async function reserveSlot(dayKey, booking) {
   } catch (error) {
     if (error.code !== 11000) throw error;
   }
-  const acquired = await BookingDay.updateOne({
-    _id: dayKey, reservations: { $not: { $elemMatch: {
-      status: { $in: ['pending', 'confirmed'] }, startTime: { $lt: booking.endTime }, endTime: { $gt: booking.startTime },
-    } } },
-  }, { $push: { reservations: booking } });
-  if (acquired.modifiedCount !== 1) throw conflict();
+  async function acquire(session) {
+    const acquired = await BookingDay.updateOne({
+      _id: dayKey, reservations: { $not: { $elemMatch: {
+        status: { $in: ['pending', 'confirmed'] }, startTime: { $lt: booking.endTime }, endTime: { $gt: booking.startTime },
+      } } },
+    }, { $push: { reservations: booking } }, { session });
+    if (acquired.modifiedCount !== 1) throw conflict();
+  }
+  if (booking.customer) await withActiveAccount(booking.customer, 'customer', acquire);
+  else await acquire();
   return booking;
 }
 

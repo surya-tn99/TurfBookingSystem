@@ -9,6 +9,7 @@ import { connectDB } from '../src/config/db.js';
 import { BookingDay } from '../src/models/BookingDay.js';
 import { Turf } from '../src/models/Turf.js';
 import { User } from '../src/models/User.js';
+import authRoutes from '../src/routes/authRoutes.js';
 import turfRoutes from '../src/routes/turfRoutes.js';
 import publicTurfRoutes from '../src/routes/publicTurfRoutes.js';
 import { razorpayWebhook } from '../src/routes/razorpayWebhook.js';
@@ -22,7 +23,8 @@ test('owner registration, setup, isolation, and backend verification', async (t)
   const customer = { id: makeId(), name: 'Player One', phone: '+919123456789', role: 'customer', isActive: true };
   const otherCustomer = { id: makeId(), name: 'Player Two', phone: '+919234567891', role: 'customer', isActive: true };
   const staff = { id: makeId(), role: 'staff', isActive: true };
-  const users = [owner, otherOwner, customer, otherCustomer, staff];
+  const closingCustomer = { id: makeId(), name: 'Closing Player', role: 'customer', isActive: true };
+  const users = [owner, otherOwner, customer, otherCustomer, staff, closingCustomer];
   const turfs = [];
   process.env.JWT_SECRET = 'turf-auth-test-secret';
   process.env.MONGODB_URI = 'mongodb://fixture.invalid/pickturf';
@@ -31,6 +33,8 @@ test('owner registration, setup, isolation, and backend verification', async (t)
     return { connection: { host: 'test fixture' } };
   });
   t.mock.method(User, 'createIndexes', async () => []);
+  const transactionSession = {};
+  t.mock.method(User.db, 'transaction', (operation) => operation(transactionSession));
   t.mock.method(User, 'findById', async (id) => users.find((user) => user.id === id));
   t.mock.method(User, 'find', ({ _id }) => ({ select: () => ({ lean: async () => users.filter((user) => _id.$in.includes(user.id))
     .map((user) => ({ ...user, _id: user.id })) }) }));
@@ -44,10 +48,25 @@ test('owner registration, setup, isolation, and backend verification', async (t)
     users.push(user);
     return user;
   });
-  t.mock.method(User, 'findOneAndUpdate', async (query, { $set }) => {
+  t.mock.method(User, 'findOneAndUpdate', async (query, { $set, $inc }, options) => {
     const user = users.find((candidate) => Object.entries(query)
       .every(([key, value]) => (key === '_id' ? candidate.id : candidate[key]) === value));
-    return user ? Object.assign(user, $set) : null;
+    if (!user) return null;
+    if ($inc) {
+      assert.equal(options.session, transactionSession);
+      user.accountActivityVersion = (user.accountActivityVersion ?? 0) + $inc.accountActivityVersion;
+    }
+    if ($set?.phone && users.some((candidate) => candidate !== user && candidate.phone === $set.phone)) {
+      throw Object.assign(new Error('duplicate'), { code: 11000, keyPattern: { phone: 1 } });
+    }
+    return Object.assign(user, $set);
+  });
+  t.mock.method(User, 'deleteOne', async ({ _id }, { session }) => {
+    assert.equal(session, transactionSession);
+    const index = users.findIndex(({ id }) => id === _id);
+    if (index < 0) return { deletedCount: 0 };
+    users.splice(index, 1);
+    return { deletedCount: 1 };
   });
   const matches = (turf, query) => (!query.owner || turf.owner === query.owner)
     && (!query._id || query._id === turf._id || query._id.$in?.includes(turf._id))
@@ -58,14 +77,15 @@ test('owner registration, setup, isolation, and backend verification', async (t)
       ? !turf.feedback?.some(({ _id }) => _id === query['feedback._id'].$ne)
       : turf.feedback?.some(({ _id }) => _id === query['feedback._id'])));
   const find = (query) => turfs.find((turf) => matches(turf, query));
-  t.mock.method(Turf, 'create', async (data) => {
+  t.mock.method(Turf, 'create', async ([data], { session }) => {
+    assert.equal(session, transactionSession);
     const id = makeId();
     const turf = {
       _id: id, id, ...data, commissionRate: 3, verificationStatus: 'pending',
       submittedForVerificationAt: new Date(), sports: [], timeSlots: [], equipment: [], media: { images: [] },
     };
     turfs.push(turf);
-    return turf;
+    return [turf];
   });
   t.mock.method(Turf, 'updateMany', async (query, { $set }) => {
     turfs.filter((turf) => matches(turf, query) && turf.verificationStatus === query.verificationStatus
@@ -110,6 +130,7 @@ test('owner registration, setup, isolation, and backend verification', async (t)
   app.use('/owner/turfs', turfRoutes);
   app.use('/turfs', publicTurfRoutes);
   app.use('/staff', staffRoutes);
+  app.use('/auth', authRoutes);
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
   t.after(() => server.close());
@@ -120,6 +141,26 @@ test('owner registration, setup, isolation, and backend verification', async (t)
       'Content-Type': 'application/json',
     }, body: body && JSON.stringify(body) },
   );
+  const authRequest = (user, path = '/me', method = 'GET', body) => fetch(
+    `http://127.0.0.1:${server.address().port}/auth${path}`, {
+      method, headers: { 'Content-Type': 'application/json',
+        ...(user && { Authorization: 'Bearer ' + jwt.sign({ id: user.id }, process.env.JWT_SECRET) }) },
+      body: body && JSON.stringify(body),
+    },
+  );
+  assert.equal((await authRequest(null, '/me/profile', 'PATCH', { name: 'New name' })).status, 401);
+  assert.equal((await authRequest(staff, '/me/profile', 'PATCH', { name: 'New name' })).status, 403);
+  assert.equal((await authRequest(staff, '/me', 'DELETE', { confirm: true })).status, 403);
+  assert.equal((await authRequest(customer, '/me/profile', 'PATCH', { name: '  ' })).status, 400);
+  assert.equal((await authRequest(customer, '/me/profile', 'PATCH', { phone: '123' })).status, 400);
+  assert.equal((await authRequest(customer, '/me/profile', 'PATCH', { phone: otherCustomer.phone })).status, 409);
+  const profile = await (await authRequest(customer, '/me/profile', 'PATCH', { name: ' Updated Player ', phone: '91234 56780', role: 'owner' })).json();
+  assert.equal(profile.user.name, 'Updated Player');
+  assert.equal(profile.user.phone, '+919123456780');
+  assert.equal(profile.user.role, 'customer');
+  assert.equal((await (await authRequest(customer)).json()).user.name, 'Updated Player');
+  const managerProfile = await authRequest(owner, '/me/profile', 'PATCH', { name: 'Venue Manager' });
+  assert.equal((await managerProfile.json()).user.name, 'Venue Manager');
   const registration = {
     name: 'The Five Yard', contactPhone: '9876543210', contactEmail: 'owner@example.test',
     address: { street: '1 Main Road', area: 'Velachery', city: 'Chennai', state: 'Tamil Nadu', pincode: '600042', mapPinUrl: 'https://maps.app.goo.gl/example' },
@@ -241,12 +282,12 @@ test('owner registration, setup, isolation, and backend verification', async (t)
   await t.test('booking access, payment verification and overlapping slot holds', async (bookingTest) => {
     const days = new Map();
     bookingTest.mock.method(BookingDay, 'findById', (key) => ({ lean: async () => days.get(key) }));
-    bookingTest.mock.method(BookingDay, 'find', ({ reservations }) => ({ select: () => ({ lean: async () =>
+    bookingTest.mock.method(BookingDay, 'find', ({ reservations }) => ({ lean: async () =>
       [...days].filter(([, day]) => day.reservations.some((entry) =>
         entry.customer === reservations.$elemMatch.customer
         && (!reservations.$elemMatch.status || entry.status === reservations.$elemMatch.status)))
         .map(([_id, day]) => ({ _id, ...day })),
-    }) }));
+    }));
     bookingTest.mock.method(BookingDay, 'updateOne', async ({ _id, reservations }, update) => {
       if (!days.has(_id)) days.set(_id, { reservations: [] });
       if (!update.$push) return { modifiedCount: 0 };
@@ -260,7 +301,8 @@ test('owner registration, setup, isolation, and backend verification', async (t)
     bookingTest.mock.method(BookingDay, 'findOneAndUpdate', ({ _id, reservations }, { $set }) => ({ lean: async () => {
       const day = days.get(_id);
       const match = reservations.$elemMatch;
-      const entry = day?.reservations.find((item) => String(item._id) === String(match._id) && item.status === match.status);
+      const entry = day?.reservations.find((item) => String(item._id) === String(match._id) && item.status === match.status
+        && (!match.customer || item.customer === match.customer));
       if (!entry) return null;
       for (const [key, value] of Object.entries($set)) entry[key.split('.').at(-1)] = value;
       return day;
@@ -329,6 +371,7 @@ test('owner registration, setup, isolation, and backend verification', async (t)
     const loser = winner === customer ? otherCustomer : customer;
     const { booking: pending } = await attempts.find(({ ok }) => ok).json();
     assert.equal(pending.status, 'pending');
+    assert.equal((await authRequest(winner, '/me', 'DELETE', { confirm: true })).status, 409);
     assert.equal(pending.paymentMethod, 'online');
     assert.equal(pending.amount, 19000);
     assert.equal(pending.slotAmount, 15000);
@@ -502,11 +545,41 @@ test('owner registration, setup, isolation, and backend verification', async (t)
     const reviewedByStaff = (await (await wallet(customer)).json()).previous.find(({ id }) => id === completedId);
     assert.equal(reviewedByStaff.review.reply, 'Thanks for playing!');
     const publicReviews = (await details()).turf.feedback;
-    assert.deepEqual(publicReviews[0], { id: completedId, author: 'Player', rating: 3, comment: 'Good game', reply: 'Thanks for playing!' });
+    assert.deepEqual(publicReviews[0], { id: completedId, author: 'Updated', rating: 3, comment: 'Good game', reply: 'Thanks for playing!' });
     assert.equal(publicReviews.every((review) => review.rating > 0), true);
     activeStaff.isActive = false;
     assert.equal((await staffRequest(activeStaff, schedulePath)).status, 401);
     activeStaff.isActive = true;
+
+    const closingDate = new Date(Date.now() + 518_400_000).toISOString().slice(0, 10);
+    assert.equal((await enableVenuePay(true)).status, 200);
+    const closingChoice = { date: closingDate, amount: 15000, paymentMethod: 'venue' };
+    const closing = await create(closingCustomer, closingChoice);
+    assert.equal(closing.status, 200);
+    const { booking: closingBooking } = await closing.json();
+    const cancel = (user, id = closingBooking.id, targetDate = closingDate) => fetch(`${origin}/turfs${path}/bookings/${targetDate}/${id}/cancel`, {
+      method: 'PATCH', headers: { Authorization: 'Bearer ' + jwt.sign({ id: user.id }, process.env.JWT_SECRET) },
+    });
+    assert.equal((await authRequest(closingCustomer, '/me', 'DELETE', {})).status, 400);
+    assert.equal((await authRequest(closingCustomer, '/me', 'DELETE', { confirm: true })).status, 409);
+    assert.equal((await cancel(customer)).status, 404);
+    assert.match((await (await cancel(closingCustomer)).json()).message, /does not allow cancellations/);
+    const setCancellation = (cutoffHours) => request(owner, path + '/configure', 'PUT', {
+      ...setup, policies: { payAtVenue: true, cancellation: { available: true, cutoffHours } },
+    });
+    assert.equal((await setCancellation(300)).status, 200);
+    assert.match((await (await cancel(closingCustomer)).json()).message, /cutoff/);
+    assert.equal((await setCancellation(0)).status, 200);
+    assert.equal((await cancel(winner, pending.id, date)).status, 409);
+    const closingWallet = await (await wallet(closingCustomer)).json();
+    assert.equal(closingWallet.current[0].canCancel, true);
+    const cancelled = await cancel(closingCustomer);
+    assert.equal((await cancelled.json()).booking.status, 'cancelled');
+    assert.equal((await cancel(closingCustomer)).status, 200);
+    assert.equal((await create(customer, closingChoice)).status, 200);
+    assert.equal((await authRequest(closingCustomer, '/me', 'DELETE', { confirm: true })).status, 204);
+    assert.equal((await authRequest(closingCustomer)).status, 401);
+    assert.equal(days.get(`${turf._id}:${closingDate}`).reservations[0].status, 'cancelled');
   });
   const dashboard = await (await request(owner)).json();
   assert.equal(dashboard.turfs[0].verificationStatus, 'verified');
@@ -535,4 +608,10 @@ test('owner registration, setup, isolation, and backend verification', async (t)
   turfs[1].isConfigured = true;
   turfs[1].timeSlots = [{ ...slot, price: undefined }, { ...slot, isActive: false }];
   assert.deepEqual(await publicListings(), []);
+  assert.equal((await authRequest(owner, '/me', 'DELETE', { confirm: true })).status, 409);
+  for (const entry of turfs.filter((item) => !item.removedAt)) {
+    assert.equal((await request(owner, '/' + entry._id, 'DELETE', { confirmationName: entry.name, confirmationEmail: owner.email })).status, 200);
+  }
+  assert.equal((await authRequest(owner, '/me', 'DELETE', { confirm: true })).status, 204);
+  assert.equal((await authRequest(owner)).status, 401);
 });

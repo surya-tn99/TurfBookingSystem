@@ -100,8 +100,9 @@ function BookingStatus({ path, date, id, token, navigate }) {
   const booking = data?.booking;
   const confirmed = booking?.status === 'confirmed';
   const expired = booking?.status === 'expired';
+  const cancelled = booking?.status === 'cancelled';
   return <section className="owner-panel booking-panel" aria-labelledby="booking-title">
-    <h1 id="booking-title">{confirmed ? 'Booking confirmed' : expired ? 'Booking hold expired' : 'Booking status'}</h1>
+    <h1 id="booking-title">{confirmed ? 'Booking confirmed' : expired ? 'Booking hold expired' : cancelled ? 'Booking canceled' : 'Booking status'}</h1>
     {error && <p className="auth-error" role="alert">{error.message}</p>}
     {!data && !error && <Skeleton label="Checking your booking…" />}
     {booking && <>
@@ -113,16 +114,16 @@ function BookingStatus({ path, date, id, token, navigate }) {
           <span>{item.name} × {item.quantity}</span><span>{price(item.unitAmount * item.quantity)}</span>
         </li>)}
       </ul>}
-      <p>{booking.paymentMethod === 'venue' ? `Pay ${price(booking.amount)} at the venue`
-        : `${price(booking.amount)}${confirmed && booking.amount > 0 ? ' paid' : ''}`}</p>
+      {!cancelled && <p>{booking.paymentMethod === 'venue' ? `Pay ${price(booking.amount)} at the venue`
+        : `${price(booking.amount)}${confirmed && booking.amount > 0 ? ' paid' : ''}`}</p>}
       {confirmed && <p>Booking reference <strong>{booking.id}</strong></p>}
       {expired && <p>Choose an available slot to start a new booking.</p>}
-      {!confirmed && !expired && <p>{booking.checkoutUrl
+      {booking.status === 'pending' && <p>{booking.checkoutUrl
         ? 'Your slot is held while you complete payment.' : 'Payment is pending. Check again in a moment.'}</p>}
     </>}
     <div className="owner-actions">
       {booking?.checkoutUrl && <a className="button button-primary" href={booking.checkoutUrl}>Open payment</a>}
-      {(error || (booking && !confirmed && !expired)) && <button type="button" className="button button-outline" onClick={reload}>Check payment status</button>}
+      {(error || booking?.status === 'pending') && <button type="button" className="button button-outline" onClick={reload}>Check payment status</button>}
       <AppLink className="button button-outline" href={`${path}?${new URLSearchParams({ date })}`} navigate={navigate}>View slots</AppLink>
     </div>
   </section>;

@@ -6,6 +6,7 @@ import { authUnavailable } from '../controllers/authController.js';
 import { authorize, protect } from '../middleware/authMiddleware.js';
 import { Turf } from '../models/Turf.js';
 import { User } from '../models/User.js';
+import { withActiveAccount } from '../services/accountActivity.js';
 import { replyToFeedback } from '../services/bookingFeedback.js';
 import { accountPhone } from '../services/phone.js';
 import { staffSchedule } from '../services/staffBookings.js';
@@ -38,10 +39,11 @@ router.use(requireAuthService, protect, authorize('owner'), (req, res, next) => 
 router.param('id', (req, res, next, id) => isObjectIdOrHexString(id) ? next() : missing(res));
 
 router.post('/', handle(async (req, res) => {
-  const turf = await Turf.create({
+  const details = {
     ...registration(req.body), owner: req.user.id, commissionAccepted: true,
     commissionAcceptedAt: new Date(),
-  });
+  };
+  const [turf] = await withActiveAccount(req.user.id, 'owner', (session) => Turf.create([details], { session }));
   scheduleTurfVerification(turf.id);
   return res.status(201).json({ turf });
 }));
